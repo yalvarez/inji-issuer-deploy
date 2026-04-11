@@ -56,8 +56,11 @@ def _resolve_provider_cfg(state: DeployState):
     raw_pc = getattr(state, "provider_cfg", None) or {}
     provider_cfg = CloudProviderConfig(**raw_pc) if isinstance(raw_pc, dict) else raw_pc
 
-    if not provider_cfg.provider and (state.issuer.aws_account_id or state.issuer.eks_cluster_name):
-        provider_cfg.provider = "aws"
+    if not provider_cfg.provider:
+        if state.issuer.aws_account_id:
+            provider_cfg.provider = "aws"
+        else:
+            provider_cfg.provider = "onprem"
     if not provider_cfg.provisioner:
         provider_cfg.provisioner = "python"
 
@@ -238,8 +241,8 @@ def run(state: DeployState, dry_run: bool = False) -> None:
         console.print(f"\n  [bold]4. Workload identity ({provider.name()})[/bold]")
         identity_ref = provider.ensure_workload_identity(cfg.issuer_id, ns, cfg)
         outputs["workload_identity_ref"] = identity_ref
-        # For Helm values — use as pod annotation/label
-        outputs["pod_identity_role_arn"] = identity_ref  # keep compat key name
+        # Keep the legacy compat key only for real AWS IAM role ARNs.
+        outputs["pod_identity_role_arn"] = identity_ref if provider.name() == "aws" and str(identity_ref).startswith("arn:") else ""
 
         # 5. DNS
         console.print(f"\n  [bold]5. DNS ({provider.name()})[/bold]")

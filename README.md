@@ -1,6 +1,6 @@
 # inji-issuer-deploy
 
-CLI tool to deploy a new Inji VC issuer that replicates the RENIEC production stack on AWS/EKS.
+CLI tool to deploy a new Inji VC issuer that replicates the RENIEC production stack on Kubernetes, with support for AWS/EKS and on-premise environments.
 
 ## What it does
 
@@ -18,11 +18,20 @@ All phases are **idempotent** — safe to re-run. State is persisted to `inji-de
 
 ## Prerequisites
 
+### Recommended first real install: on-prem MVP
+
 - Python 3.11+
-- AWS CLI configured with credentials for the target account
-- `kubectl` pointing to the target EKS cluster
+- `kubectl` pointing to your target Kubernetes cluster
 - `helm` with the MOSIP repo (`helm repo add mosip https://mosip.github.io/mosip-helm`)
-- An existing RENIEC-pattern stack (shared RDS, mimoto, EKS cluster)
+- A shared PostgreSQL endpoint already available
+- A running `mimoto` deployment and its config source (`ConfigMap` or `MinIO`)
+- `cert-manager` installed in the cluster
+- Optional: Harbor, Vault, and/or MinIO if you want those backends
+
+### Cloud path (secondary for now)
+
+- AWS CLI configured with credentials for the target account
+- Existing RENIEC-pattern stack on EKS
 
 ## Installation
 
@@ -39,6 +48,24 @@ pip install -e .
 ```
 
 ## Quick start
+
+### On-prem MVP (recommended)
+
+```bash
+# First run: choose provider=onprem and provisioner=python in Phase 0
+inji-issuer-deploy phase collect
+inji-issuer-deploy phase infra --dry-run
+inji-issuer-deploy phase config --dry-run
+inji-issuer-deploy run
+```
+
+If you want to rehearse the cycle before the first real deployment, use the example in:
+
+```text
+docs/examples/onprem-simulation.md
+```
+
+### General workflow
 
 ```bash
 # Full interactive deployment
@@ -84,6 +111,19 @@ The tool asks for:
 | Data API base URL | `https://api.licencias.mtc.gob.pe` | Issuer's own data source |
 | Data API auth type | `mtls` / `oauth2` / `apikey` | |
 | Credential types | one or more scopes + profiles | e.g. `licencia-conducir` → `LICENCIA_B` |
+
+## On-prem MVP profile
+
+For the first real on-prem installation, the simplest supported combination is:
+
+- **provider:** `onprem`
+- **provisioner:** `python`
+- **registry backend:** `plain` or `harbor`
+- **secrets backend:** `k8s`
+- **mimoto config backend:** `ConfigMap` first, `MinIO` later if needed
+- **TLS:** `cert-manager` using either `ClusterIssuer/letsencrypt-prod` or your internal CA
+
+This avoids any dependency on public cloud credentials and completes the full operator cycle inside Kubernetes.
 
 ## Provisioning model
 

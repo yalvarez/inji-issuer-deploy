@@ -252,8 +252,10 @@ extraEnvVars: |
 serviceAccount:
   create: true
   name: inji-{{ issuer_id }}-sa
+{% if pod_identity_role_arn and pod_identity_role_arn.startswith('arn:') %}
   annotations:
     eks.amazonaws.com/role-arn: "{{ pod_identity_role_arn }}"
+{% endif %}
 
 metrics:
   enabled: true

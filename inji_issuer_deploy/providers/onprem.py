@@ -48,18 +48,24 @@ class OnPremProvider(CloudProvider):
 
     def ensure_registry_repo(self, repo_name: str) -> str:
         """
-        Creates a Harbor project if it doesn't exist.
-        Harbor repositories are created on first push within a project.
+        Prepare a registry repository reference for on-prem deployments.
+        Harbor projects can be created proactively; plain/docker-compatible
+        registries are treated as push-on-demand targets.
         """
+        backend = self._pcfg.onprem_registry_backend or "plain"
         harbor_url = self._pcfg.onprem_harbor_url
         project = self._pcfg.onprem_harbor_project or f"inji-{self._icfg.issuer_id}"
 
-        if harbor_url:
+        if backend == "docker_hub":
+            uri = f"docker.io/{project}/{repo_name}"
+            console.print(f"  [dim]→ Docker Hub repository will be used: {uri}[/dim]")
+            return uri
+
+        if backend == "harbor" and harbor_url:
             import httpx
             user = os.environ.get("HARBOR_USERNAME", "admin")
-            pwd  = os.environ.get("HARBOR_PASSWORD", "")
+            pwd = os.environ.get("HARBOR_PASSWORD", "")
             try:
-                # Check if project exists
                 r = httpx.get(
                     f"{harbor_url}/api/v2.0/projects",
                     params={"name": project},
@@ -77,12 +83,10 @@ class OnPremProvider(CloudProvider):
             except Exception as e:
                 console.print(f"  [yellow]⚠[/yellow]  Could not create Harbor project: {e}")
 
-            uri = f"{harbor_url.replace('https://', '').replace('http://', '')}/{project}/{repo_name}"
-        else:
-            # Fallback: just return the plain repo name for a local registry
-            uri = f"localhost:5000/{project}/{repo_name}"
-            console.print(f"  [yellow]⚠[/yellow]  No Harbor URL configured. Using local registry: {uri}")
+            return f"{harbor_url.replace('https://', '').replace('http://', '')}/{project}/{repo_name}"
 
+        uri = f"localhost:5000/{project}/{repo_name}"
+        console.print(f"  [yellow]⚠[/yellow]  Using plain/local registry target: {uri}")
         return uri
 
     # ── Secrets store (Vault or K8s Secrets) ─────────────
@@ -221,8 +225,8 @@ class OnPremProvider(CloudProvider):
 
     def ensure_tls_certificate(self, domain: str) -> str | None:
         """Generates cert-manager Certificate manifest (same as Azure/GCP)."""
-        issuer_type = "ClusterIssuer"
-        issuer_name = "letsencrypt-prod"  # or your internal CA issuer name
+        issuer_type = self._pcfg.onprem_cert_issuer_kind or "ClusterIssuer"
+        issuer_name = self._pcfg.onprem_cert_issuer_name or "letsencrypt-prod"
 
         manifest = f"""apiVersion: cert-manager.io/v1
 kind: Certificate
@@ -294,24 +298,46 @@ spec:
     def _read_configmap(self, key: str) -> dict:
         ns = self._icfg.mimoto_service_namespace or "mimoto"
         cm_name = "mimoto-issuers-config"
+        safe_key = key.replace(".", "_")
         r = subprocess.run(
-            ["kubectl", "get", "configmap", cm_name, "-n", ns,
-             "-o", f"jsonpath={{.data.{key.replace('.', '_')}}}"],
+            ["kubectl", "get", "configmap", cm_name, "-n", ns, "-o", "json"],
             capture_output=True, text=True, check=False,
         )
         if r.returncode != 0 or not r.stdout:
             raise RuntimeError(f"ConfigMap {cm_name} not found in namespace {ns}")
-        return json.loads(r.stdout)
+
+        cm = json.loads(r.stdout)
+        data = cm.get("data", {})
+        raw = data.get(key) or data.get(safe_key)
+        if not raw:
+            raise RuntimeError(
+                f"Key {key!r} (or fallback {safe_key!r}) not found in ConfigMap {cm_name}"
+            )
+        return json.loads(raw)
 
     def _write_configmap(self, key: str, data: dict) -> None:
         ns = self._icfg.mimoto_service_namespace or "mimoto"
         cm_name = "mimoto-issuers-config"
         safe_key = key.replace(".", "_")
         content = json.dumps(data, indent=2)
+
+        existing = subprocess.run(
+            ["kubectl", "get", "configmap", cm_name, "-n", ns, "-o", "json"],
+            capture_output=True, text=True, check=False,
+        )
+        data_key = safe_key
+        if existing.returncode == 0 and existing.stdout:
+            cm = json.loads(existing.stdout)
+            cm_data = cm.get("data", {})
+            if key in cm_data:
+                data_key = key
+            elif safe_key in cm_data:
+                data_key = safe_key
+
         result = subprocess.run(
             ["kubectl", "patch", "configmap", cm_name, "-n", ns,
              "--type=merge",
-             f"-p", json.dumps({"data": {safe_key: content}})],
+             f"-p", json.dumps({"data": {data_key: content}})],
             capture_output=True, text=True, check=False,
         )
         if result.returncode != 0:

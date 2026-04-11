@@ -60,6 +60,17 @@ class IssuerConfig:
     mimoto_issuers_s3_key: str = "mimoto-issuers-config.json"
     mimoto_service_namespace: str = "mimoto"
     mimoto_service_name: str = "mimoto"
+    shared_config_source_namespace: str = "config-server"
+    shared_configmaps: list[str] = field(default_factory=lambda: [
+        "artifactory-share", "config-server-share"
+    ])
+    helm_repo_name: str = "mosip"
+    helm_repo_url: str = "https://mosip.github.io/mosip-helm"
+    certify_chart_ref: str = "mosip/inji-certify"
+    postgres_init_chart_ref: str = "mosip/postgres-init"
+    postgres_init_chart_version: str = "0.0.1-develop"
+    softhsm_chart_ref: str = "mosip/softhsm"
+    softhsm_namespace: str = "softhsm"
     certify_image: str = "mosipid/inji-certify-with-plugins:0.12.2"
     chart_version: str = "0.12.2"
     softhsm_chart_version: str = "1.3.0-beta.2"

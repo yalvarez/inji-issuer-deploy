@@ -128,10 +128,14 @@ def _load_provider_cfg(state: DeployState) -> CloudProviderConfig:
     raw_pc = getattr(state, "provider_cfg", None) or {}
     provider_cfg = CloudProviderConfig(**raw_pc) if isinstance(raw_pc, dict) else raw_pc
     if not provider_cfg.provider:
-        provider_cfg.provider = "aws"
+        provider_cfg.provider = "onprem"
     if not provider_cfg.provisioner:
         provider_cfg.provisioner = "python"
     return provider_cfg
+
+
+def _csv_list(value: str) -> list[str]:
+    return [item.strip() for item in value.split(",") if item.strip()]
 
 
 # ── scope mapping wizard ──────────────────────────────────────
@@ -228,8 +232,8 @@ def run(state: DeployState) -> None:
 
     provider_cfg.provider = _ask_choice(
         "Infrastructure provider",
-        choices=["aws", "azure", "gcp", "onprem"],
-        default=provider_cfg.provider or "aws",
+        choices=["onprem", "aws", "azure", "gcp"],
+        default=provider_cfg.provider or "onprem",
     )
     provider_cfg.provisioner = _ask_choice(
         "Provisioning engine",
@@ -319,6 +323,11 @@ def run(state: DeployState) -> None:
             default=provider_cfg.gcp_project_id or "",
         )
     else:
+        provider_cfg.onprem_registry_backend = _ask_choice(
+            "On-prem registry backend",
+            choices=["plain", "harbor", "docker_hub"],
+            default=provider_cfg.onprem_registry_backend or "plain",
+        )
         provider_cfg.onprem_secrets_backend = _ask_choice(
             "On-prem secrets backend",
             choices=["k8s", "vault"],
@@ -337,11 +346,11 @@ def run(state: DeployState) -> None:
         provider_cfg.onprem_harbor_url = _ask_optional(
             "Harbor registry URL (optional)",
             default=provider_cfg.onprem_harbor_url or "",
-            hint="e.g. https://harbor.internal",
+            hint="needed only when registry backend = harbor, e.g. https://harbor.internal",
             validator=_url,
         )
         provider_cfg.onprem_harbor_project = _ask_optional(
-            "Harbor project (optional)",
+            "Registry project / namespace",
             default=provider_cfg.onprem_harbor_project or f"inji-{cfg.issuer_id}",
         )
         provider_cfg.onprem_minio_endpoint = _ask_optional(
@@ -353,6 +362,16 @@ def run(state: DeployState) -> None:
         provider_cfg.onprem_minio_bucket = _ask_optional(
             "MinIO bucket (optional)",
             default=provider_cfg.onprem_minio_bucket or "",
+        )
+        provider_cfg.onprem_cert_issuer_name = _ask(
+            "cert-manager issuer name",
+            default=provider_cfg.onprem_cert_issuer_name or "letsencrypt-prod",
+            hint="use your internal CA issuer here if you don't use Let's Encrypt",
+        )
+        provider_cfg.onprem_cert_issuer_kind = _ask_choice(
+            "cert-manager issuer kind",
+            choices=["ClusterIssuer", "Issuer"],
+            default=provider_cfg.onprem_cert_issuer_kind or "ClusterIssuer",
         )
 
     # ── 3. Shared infrastructure ─────────────────────────────
@@ -469,6 +488,45 @@ def run(state: DeployState) -> None:
         "Inji-certify Helm chart version",
         default=cfg.chart_version,
     )
+    cfg.helm_repo_name = _ask(
+        "Helm repo name",
+        default=cfg.helm_repo_name or "mosip",
+    )
+    cfg.helm_repo_url = _ask(
+        "Helm repo URL",
+        default=cfg.helm_repo_url or "https://mosip.github.io/mosip-helm",
+    )
+    cfg.certify_chart_ref = _ask(
+        "Inji-certify chart reference",
+        default=cfg.certify_chart_ref or "mosip/inji-certify",
+    )
+    cfg.postgres_init_chart_ref = _ask(
+        "Postgres init chart reference",
+        default=cfg.postgres_init_chart_ref or "mosip/postgres-init",
+    )
+    cfg.postgres_init_chart_version = _ask(
+        "Postgres init chart version",
+        default=cfg.postgres_init_chart_version or "0.0.1-develop",
+    )
+    cfg.softhsm_chart_ref = _ask(
+        "SoftHSM chart reference",
+        default=cfg.softhsm_chart_ref or "mosip/softhsm",
+    )
+    cfg.softhsm_namespace = _ask(
+        "SoftHSM namespace",
+        default=cfg.softhsm_namespace or "softhsm",
+    )
+    shared_default = ", ".join(cfg.shared_configmaps or ["artifactory-share", "config-server-share"])
+    cfg.shared_config_source_namespace = _ask(
+        "Shared config source namespace",
+        default=cfg.shared_config_source_namespace or "config-server",
+        hint="namespace that contains shared ConfigMaps to copy into the issuer namespace",
+    )
+    shared_raw = _ask_optional(
+        "Shared ConfigMaps to copy (comma-separated, blank to skip)",
+        default=shared_default,
+    )
+    cfg.shared_configmaps = _csv_list(shared_raw)
 
     # ── Summary ───────────────────────────────────────────────
     state.provider_cfg = asdict(provider_cfg)
@@ -523,6 +581,15 @@ def _print_summary(cfg: IssuerConfig, provider_cfg: CloudProviderConfig | None =
             ("AWS profile", provider_cfg.aws_profile),
             ("Route53 zone", provider_cfg.aws_route53_zone_name),
             ("Manage ACM", "yes" if provider_cfg.aws_manage_acm else "no"),
+        ])
+    elif provider_cfg and provider_cfg.provider == "onprem":
+        rows.extend([
+            ("Registry backend", provider_cfg.onprem_registry_backend),
+            ("Secrets backend", provider_cfg.onprem_secrets_backend),
+            ("Config backend", "MinIO" if provider_cfg.onprem_minio_endpoint else "ConfigMap"),
+            ("cert-manager issuer", f"{provider_cfg.onprem_cert_issuer_kind}/{provider_cfg.onprem_cert_issuer_name}"),
+            ("Shared config source", cfg.shared_config_source_namespace),
+            ("Shared ConfigMaps", ", ".join(cfg.shared_configmaps) if cfg.shared_configmaps else "<none>"),
         ])
     for k, v in rows:
         t.add_row(k, v or "[red]<empty>[/red]")

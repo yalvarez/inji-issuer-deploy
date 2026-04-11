@@ -372,3 +372,40 @@ class TestOnPremProviderDryRun:
         plan = p.dry_run_plan("mtc", issuer_cfg)
         resource_types = " ".join(r[0] for r in plan)
         assert "ConfigMap" in resource_types
+
+    def test_cert_manager_manifest_uses_configured_issuer(self, issuer_cfg, monkeypatch, tmp_path):
+        from inji_issuer_deploy.providers.onprem import OnPremProvider
+        monkeypatch.chdir(tmp_path)
+        pc = CloudProviderConfig(
+            provider="onprem",
+            onprem_cert_issuer_name="ca-internal",
+            onprem_cert_issuer_kind="Issuer",
+        )
+        p = OnPremProvider(pc, issuer_cfg)
+
+        cert_file = p.ensure_tls_certificate("certify.mtc.gob.pe")
+        manifest = Path(cert_file).read_text(encoding="utf-8")
+
+        assert "name: ca-internal" in manifest
+        assert "kind: Issuer" in manifest
+
+    def test_read_configmap_uses_safe_key(self, issuer_cfg):
+        from inji_issuer_deploy.providers.onprem import OnPremProvider
+        pc = CloudProviderConfig(provider="onprem")
+        p = OnPremProvider(pc, issuer_cfg)
+
+        fake_cm = {
+            "data": {
+                "mimoto-issuers-config_json": json.dumps({"issuers": []})
+            }
+        }
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(
+                returncode=0,
+                stdout=json.dumps(fake_cm),
+                stderr="",
+            )
+            data = p._read_configmap("mimoto-issuers-config.json")
+
+        assert data == {"issuers": []}

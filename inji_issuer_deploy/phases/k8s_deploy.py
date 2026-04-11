@@ -89,6 +89,21 @@ def _resolve_provider(state: DeployState, cfg):
     return get_provider(provider_cfg, cfg)
 
 
+def _cfg_list(value, default: list[str] | None = None) -> list[str]:
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    if isinstance(value, str):
+        return [item.strip() for item in value.split(",") if item.strip()]
+    return list(default or [])
+
+
+def _shared_configmaps(cfg) -> list[str]:
+    return _cfg_list(
+        getattr(cfg, "shared_configmaps", None),
+        default=["artifactory-share", "config-server-share"],
+    )
+
+
 # ── step 1: copy shared configmaps ───────────────────────────
 
 def _copy_configmap(src_ns: str, dest_ns: str, name: str) -> None:
@@ -105,10 +120,6 @@ def _copy_configmap(src_ns: str, dest_ns: str, name: str) -> None:
         "name": data["metadata"]["name"],
         "namespace": dest_ns,
     }
-    apply = _run(
-        ["kubectl", "apply", "-f", "-"],
-        check=True,
-    )
     import subprocess as sp
     proc = sp.run(
         ["kubectl", "apply", "-f", "-"],
@@ -156,6 +167,8 @@ def _apply_configmap(cfg_file: Path, ns: str) -> None:
 
 def _init_db(cfg, ns: str, db_init_values: Path, provider, db_secret_ref: str | None = None) -> None:
     release = f"postgres-init-{cfg.issuer_id}"
+    chart_ref = getattr(cfg, "postgres_init_chart_ref", "mosip/postgres-init")
+    chart_version = getattr(cfg, "postgres_init_chart_version", "0.0.1-develop")
     if _helm_release_exists(ns, release):
         _skip(f"Helm release {release}")
         return
@@ -174,9 +187,9 @@ def _init_db(cfg, ns: str, db_init_values: Path, provider, db_secret_ref: str | 
     _helm(
         "-n", ns,
         "install", release,
-        "mosip/postgres-init",
+        chart_ref,
         "-f", str(db_init_values),
-        "--version", "0.0.1-develop",
+        "--version", chart_version,
         f"--set", f"dbUserPasswords.dbuserPassword={db_password}",
         "--wait", "--wait-for-jobs",
         "--timeout", "300s",
@@ -187,7 +200,8 @@ def _init_db(cfg, ns: str, db_init_values: Path, provider, db_secret_ref: str | 
 # ── step 4: SoftHSM ──────────────────────────────────────────
 
 def _install_softhsm(cfg, ns: str, softhsm_values: Path) -> None:
-    softhsm_ns = "softhsm"
+    softhsm_ns = getattr(cfg, "softhsm_namespace", "softhsm")
+    chart_ref = getattr(cfg, "softhsm_chart_ref", "mosip/softhsm")
     release = f"softhsm-certify-{cfg.issuer_id}"
     if _helm_release_exists(softhsm_ns, release):
         _skip(f"SoftHSM release {release}")
@@ -200,7 +214,7 @@ def _install_softhsm(cfg, ns: str, softhsm_values: Path) -> None:
     _helm(
         "-n", softhsm_ns,
         "install", release,
-        "mosip/softhsm",
+        chart_ref,
         "-f", str(softhsm_values),
         "--version", cfg.softhsm_chart_version,
         "--wait",
@@ -216,6 +230,7 @@ def _install_certify(cfg, ns: str,
                      certify_properties: Path,
                      helm_values: Path) -> None:
     release = f"inji-certify-{cfg.issuer_id}"
+    chart_ref = getattr(cfg, "certify_chart_ref", "mosip/inji-certify")
     if _helm_release_exists(ns, release):
         _skip(f"inji-certify release {release}")
         return
@@ -243,7 +258,7 @@ def _install_certify(cfg, ns: str,
     _helm(
         "-n", ns,
         "install", release,
-        "mosip/inji-certify",
+        chart_ref,
         "-f", str(helm_values),
         "--version", cfg.chart_version,
         f"--set", f"istio.hosts[0]={cfg.base_domain}",
@@ -334,11 +349,14 @@ def run(state: DeployState, dry_run: bool = False) -> None:
         _print_dry_run(cfg, ns)
         return
 
-    # Add MOSIP Helm repo
-    _step("adding MOSIP Helm repository")
-    _helm("repo", "add", "mosip", "https://mosip.github.io/mosip-helm", check=False)
-    _helm("repo", "update")
-    _ok("Helm repos updated")
+    # Add Helm repo used by the configured chart refs
+    repo_name = getattr(cfg, "helm_repo_name", "mosip")
+    repo_url = getattr(cfg, "helm_repo_url", "https://mosip.github.io/mosip-helm")
+    if repo_name and repo_url:
+        _step(f"adding Helm repository {repo_name}")
+        _helm("repo", "add", repo_name, repo_url, check=False)
+        _helm("repo", "update")
+        _ok("Helm repos updated")
 
     state.mark_started("k8s_deploy")
     outputs: dict = {}
@@ -348,8 +366,13 @@ def run(state: DeployState, dry_run: bool = False) -> None:
 
         # 1. Copy shared ConfigMaps
         console.print("\n  [bold]1. Shared ConfigMaps[/bold]")
-        for cm_name in ["artifactory-share", "config-server-share"]:
-            _copy_configmap("config-server", ns, cm_name)
+        shared_source_ns = getattr(cfg, "shared_config_source_namespace", "config-server")
+        shared_configmaps = _shared_configmaps(cfg)
+        if shared_configmaps:
+            for cm_name in shared_configmaps:
+                _copy_configmap(shared_source_ns, ns, cm_name)
+        else:
+            _skip("shared ConfigMaps")
 
         # 2. Apply issuer ConfigMap
         console.print("\n  [bold]2. Issuer ConfigMap[/bold]")
@@ -398,12 +421,16 @@ def _print_dry_run(cfg, ns: str) -> None:
     t = Table(title="Kubernetes operations (dry run)", show_header=True)
     t.add_column("Step")
     t.add_column("Action")
+
+    shared_source_ns = getattr(cfg, "shared_config_source_namespace", "config-server")
+    shared_configmaps = _shared_configmaps(cfg)
+    shared_label = ", ".join(shared_configmaps) if shared_configmaps else "<none>"
     rows = [
-        ("1. ConfigMaps",  "copy artifactory-share, config-server-share → " + ns),
+        ("1. ConfigMaps",  f"copy {shared_label} from {shared_source_ns} → {ns}"),
         ("2. ConfigMap",   f"kubectl apply k8s-configmap.yaml -n {ns}"),
-        ("3. DB init",     f"helm install postgres-init-{cfg.issuer_id}"),
-        ("4. SoftHSM",     f"helm install softhsm-certify-{cfg.issuer_id}"),
-        ("5. Certify",     f"helm install inji-certify-{cfg.issuer_id} v{cfg.chart_version}"),
+        ("3. DB init",     f"helm install postgres-init-{cfg.issuer_id} from {getattr(cfg, 'postgres_init_chart_ref', 'mosip/postgres-init')}"),
+        ("4. SoftHSM",     f"helm install softhsm-certify-{cfg.issuer_id} in {getattr(cfg, 'softhsm_namespace', 'softhsm')}"),
+        ("5. Certify",     f"helm install inji-certify-{cfg.issuer_id} from {getattr(cfg, 'certify_chart_ref', 'mosip/inji-certify')} v{cfg.chart_version}"),
         ("6. Mimoto",      f"Config-store patch + kubectl rollout restart {cfg.mimoto_service_name}"),
     ]
     for s, a in rows:

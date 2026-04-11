@@ -10,11 +10,12 @@ import os
 import tempfile
 from pathlib import Path
 import subprocess
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from inji_issuer_deploy.cloud import CloudProviderConfig
-from inji_issuer_deploy.phases import aws_infra, infra
+from inji_issuer_deploy.phases import aws_infra, infra, k8s_deploy
 from inji_issuer_deploy.state import (
     DeployState, IssuerConfig, load_state, save_state,
     reset_state, STATE_FILE_ENV,
@@ -232,6 +233,20 @@ class TestConfigGen:
         assert "certify.mtc.gob.pe" in values
         assert "0.12.2" in values
 
+    def test_onprem_helm_values_omit_aws_role_annotation(self, tmp_state, full_config,
+                                                          tmp_path, monkeypatch):
+        monkeypatch.setattr(config_gen, "OUTPUT_DIR_PREFIX", str(tmp_path))
+        state = DeployState(issuer=full_config)
+        state.mark_done("infra", {
+            "db_name": "inji_mtc",
+            "pod_identity_role_arn": "k8s-sa://inji-mtc/inji-mtc-sa",
+        })
+
+        config_gen.run(state, dry_run=False)
+
+        values = (Path(tmp_path) / "mtc" / "helm-values-certify.yaml").read_text(encoding="utf-8")
+        assert "eks.amazonaws.com/role-arn" not in values
+
     def test_dry_run_does_not_write_files(self, tmp_state, full_config,
                                           tmp_path, monkeypatch):
         monkeypatch.setattr(config_gen, "OUTPUT_DIR_PREFIX", str(tmp_path))
@@ -308,6 +323,55 @@ class TestInfraPhase:
 
         assert state.is_done("infra")
         assert state.output("infra", "db_name") == "inji_mtc"
+
+
+class TestK8sDeploy:
+    def test_deploy_dry_run_uses_configured_shared_resources(self, tmp_state, full_config):
+        full_config.shared_config_source_namespace = "platform-shared"
+        full_config.shared_configmaps = ["global-config", "issuer-common"]
+        state = DeployState(issuer=full_config)
+        state.mark_done("infra", {"db_name": "inji_mtc", "pod_identity_role_arn": ""})
+        state.mark_done("config_gen", {
+            f"certify-{full_config.issuer_id}.properties": f".inji-deploy/{full_config.issuer_id}/certify-{full_config.issuer_id}.properties"
+        })
+        save_state(state)
+
+        from click.testing import CliRunner
+        from inji_issuer_deploy.cli import main
+        runner = CliRunner()
+        result = runner.invoke(main, [
+            "phase", "deploy", "--dry-run", "--state-file", tmp_state
+        ])
+        assert result.exit_code == 0
+        assert "platform-shared" in result.output
+        assert "global-config, issuer-common" in result.output
+
+    def test_copy_configmap_does_not_try_empty_apply(self, monkeypatch):
+        def fake_kubectl(*args, check=True):
+            if args == ("get", "configmap", "config-server-share", "-n", "dest",):
+                return subprocess.CompletedProcess(["kubectl", *args], 1, stdout="", stderr="not found")
+            if args == ("get", "configmap", "config-server-share", "-n", "src", "-o", "json"):
+                return subprocess.CompletedProcess(
+                    ["kubectl", *args],
+                    0,
+                    stdout=json.dumps({
+                        "metadata": {"name": "config-server-share", "namespace": "src"},
+                        "data": {"foo": "bar"},
+                    }),
+                    stderr="",
+                )
+            raise AssertionError(f"Unexpected kubectl call: {args}")
+
+        monkeypatch.setattr(k8s_deploy, "_kubectl", fake_kubectl)
+
+        def fail_run(*args, **kwargs):
+            raise AssertionError("_run should not be called for an empty kubectl apply")
+
+        monkeypatch.setattr(k8s_deploy, "_run", fail_run)
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+            k8s_deploy._copy_configmap("src", "dest", "config-server-share")
 
 
 class TestAwsInfra:

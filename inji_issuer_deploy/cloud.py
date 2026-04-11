@@ -67,7 +67,9 @@ class CloudProviderConfig:
     onprem_minio_endpoint: str = ""      # MinIO endpoint (or "" to use K8s ConfigMap)
     onprem_minio_bucket: str = ""
     onprem_secrets_backend: str = "k8s"  # "vault" | "k8s"
-    onprem_registry_backend: str = "harbor"  # "harbor" | "docker_hub" | "plain"
+    onprem_registry_backend: str = "plain"  # "harbor" | "docker_hub" | "plain"
+    onprem_cert_issuer_name: str = "letsencrypt-prod"
+    onprem_cert_issuer_kind: str = "ClusterIssuer"
 
 
 # ── Abstract interface ────────────────────────────────────────
@@ -359,6 +361,17 @@ def _check_onprem(cfg: CloudProviderConfig) -> tuple[bool, str]:
                            capture_output=True, text=True, check=False)
         if r.returncode == 0:
             found.append("kubectl: cluster reachable")
+
+            cert_mgr = subprocess.run(
+                ["kubectl", "get", "crd", "certificates.cert-manager.io"],
+                capture_output=True, text=True, check=False,
+            )
+            if cert_mgr.returncode == 0:
+                found.append("cert-manager: detected")
+            else:
+                issues.append(
+                    "cert-manager CRDs not found. Install cert-manager or prepare TLS manually."
+                )
         else:
             issues.append("kubectl is installed but cannot reach the cluster. Check your kubeconfig.")
     else:
@@ -393,6 +406,24 @@ def _check_onprem(cfg: CloudProviderConfig) -> tuple[bool, str]:
                 issues.append(f"Harbor at {cfg.onprem_harbor_url} returned {r.status_code}")
         except Exception as e:
             issues.append(f"Cannot reach Harbor at {cfg.onprem_harbor_url}: {e}")
+
+    # MinIO (optional)
+    if cfg.onprem_minio_endpoint:
+        try:
+            import minio  # noqa: F401
+        except ImportError:
+            issues.append("MinIO endpoint configured but the `minio` Python package is not installed.")
+        else:
+            import httpx
+            try:
+                r = httpx.get(f"{cfg.onprem_minio_endpoint}/minio/health/live",
+                              timeout=5, verify=False)
+                if r.status_code == 200:
+                    found.append(f"MinIO: reachable at {cfg.onprem_minio_endpoint}")
+                else:
+                    issues.append(f"MinIO at {cfg.onprem_minio_endpoint} returned {r.status_code}")
+            except Exception as e:
+                issues.append(f"Cannot reach MinIO at {cfg.onprem_minio_endpoint}: {e}")
 
     if issues:
         return False, "On-premise checks failed:\n" + "\n".join(f"  • {i}" for i in issues)
