@@ -153,9 +153,9 @@ class CloudProvider(abc.ABC):
         ...
 
 
-# ── Credential checker (runs in Phase 0) ─────────────────────
+# ── Credential checker / readiness report ────────────────────
 
-def check_and_explain(provider_cfg: CloudProviderConfig) -> tuple[bool, str]:
+def check_and_explain(provider_cfg: CloudProviderConfig, issuer_cfg=None) -> tuple[bool, str]:
     """
     Human-friendly credential check before any cloud operation.
     Returns (ok, explanation).
@@ -168,8 +168,46 @@ def check_and_explain(provider_cfg: CloudProviderConfig) -> tuple[bool, str]:
     elif p == "gcp":
         return _check_gcp(provider_cfg)
     elif p == "onprem":
-        return _check_onprem(provider_cfg)
+        return _check_onprem(provider_cfg, issuer_cfg=issuer_cfg)
     return False, f"Unknown provider: {p!r}"
+
+
+def _result(name: str, label: str, status: str, detail: str) -> dict[str, str]:
+    return {"name": name, "label": label, "status": status, "detail": detail}
+
+
+def _preflight_summary(checks: list[dict[str, str]]) -> tuple[bool, str]:
+    errors = sum(1 for item in checks if item["status"] == "error")
+    warnings = sum(1 for item in checks if item["status"] == "warning")
+    ok = errors == 0
+    if ok and warnings == 0:
+        return True, "All required checks passed."
+    if ok:
+        return True, f"Required checks passed with {warnings} warning(s)."
+    return False, f"{errors} required check(s) failed and {warnings} warning(s) were raised."
+
+
+def preflight_report(provider_cfg: CloudProviderConfig, issuer_cfg=None) -> dict[str, Any]:
+    """Structured preflight report for CLI and web UI consumption."""
+    provider = provider_cfg.provider or "onprem"
+
+    if provider == "onprem":
+        return _onprem_preflight_report(provider_cfg, issuer_cfg=issuer_cfg)
+
+    ok, message = check_and_explain(provider_cfg)
+    return {
+        "ok": ok,
+        "provider": provider,
+        "summary": "All required checks passed." if ok else "Provider checks require attention.",
+        "checks": [
+            _result(
+                "credentials",
+                f"{provider.upper()} credentials",
+                "ok" if ok else "error",
+                message,
+            )
+        ],
+    }
 
 
 def _check_aws(cfg: CloudProviderConfig) -> tuple[bool, str]:
@@ -350,85 +388,271 @@ No GCP credentials found. Options:
 """
 
 
-def _check_onprem(cfg: CloudProviderConfig) -> tuple[bool, str]:
-    """Check on-premise tooling: kubectl, helm, vault (optional), harbor (optional)."""
-    issues = []
-    found = []
+def _onprem_preflight_report(cfg: CloudProviderConfig, issuer_cfg=None) -> dict[str, Any]:
+    """Structured readiness report for on-prem deployments."""
+    checks: list[dict[str, str]] = []
 
-    # kubectl
-    if shutil.which("kubectl"):
-        r = subprocess.run(["kubectl", "cluster-info", "--request-timeout=5s"],
-                           capture_output=True, text=True, check=False)
-        if r.returncode == 0:
-            found.append("kubectl: cluster reachable")
-
-            cert_mgr = subprocess.run(
-                ["kubectl", "get", "crd", "certificates.cert-manager.io"],
-                capture_output=True, text=True, check=False,
-            )
-            if cert_mgr.returncode == 0:
-                found.append("cert-manager: detected")
-            else:
-                issues.append(
-                    "cert-manager CRDs not found. Install cert-manager or prepare TLS manually."
-                )
+    cluster_reachable = False
+    kubectl_path = shutil.which("kubectl")
+    if kubectl_path:
+        checks.append(_result("kubectl", "kubectl", "ok", f"Found at {kubectl_path}"))
+        ctx = subprocess.run(
+            ["kubectl", "config", "current-context"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if ctx.returncode == 0 and (ctx.stdout or "").strip():
+            checks.append(_result("kube-context", "Kubernetes context", "ok", (ctx.stdout or "").strip()))
         else:
-            issues.append("kubectl is installed but cannot reach the cluster. Check your kubeconfig.")
-    else:
-        issues.append("kubectl not found. Install: https://kubernetes.io/docs/tasks/tools/")
+            detail = (ctx.stderr or ctx.stdout or "No current context is set.").strip()
+            checks.append(_result("kube-context", "Kubernetes context", "error", detail))
 
-    # helm
-    if shutil.which("helm"):
-        found.append("helm: available")
+        r = subprocess.run(
+            ["kubectl", "cluster-info", "--request-timeout=5s"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if r.returncode == 0:
+            cluster_reachable = True
+            checks.append(_result("cluster", "Cluster reachability", "ok", "kubectl can reach the cluster"))
+        else:
+            checks.append(
+                _result(
+                    "cluster",
+                    "Cluster reachability",
+                    "error",
+                    "kubectl is installed but cannot reach the cluster. Check your kubeconfig.",
+                )
+            )
     else:
-        issues.append("helm not found. Install: https://helm.sh/docs/intro/install/")
+        checks.append(
+            _result(
+                "kubectl",
+                "kubectl",
+                "error",
+                "kubectl not found. Install: https://kubernetes.io/docs/tasks/tools/",
+            )
+        )
 
-    # Vault (optional)
+    helm_path = shutil.which("helm")
+    if helm_path:
+        checks.append(_result("helm", "Helm", "ok", f"Found at {helm_path}"))
+        repo_list = subprocess.run(["helm", "repo", "list"], capture_output=True, text=True, check=False)
+        if repo_list.returncode == 0 and "mosip" in (repo_list.stdout or "").lower():
+            checks.append(_result("helm-repo", "MOSIP Helm repo", "ok", "MOSIP Helm repo is configured"))
+        else:
+            checks.append(
+                _result(
+                    "helm-repo",
+                    "MOSIP Helm repo",
+                    "warning",
+                    "MOSIP Helm repo is not configured yet. Run: helm repo add mosip https://mosip.github.io/mosip-helm ; helm repo update",
+                )
+            )
+    else:
+        checks.append(
+            _result(
+                "helm",
+                "Helm",
+                "error",
+                "helm not found. Install: https://helm.sh/docs/intro/install/",
+            )
+        )
+
+    if cluster_reachable:
+        cert_mgr = subprocess.run(
+            ["kubectl", "get", "crd", "certificates.cert-manager.io"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if cert_mgr.returncode == 0:
+            checks.append(_result("cert-manager", "cert-manager CRDs", "ok", "cert-manager is installed"))
+        else:
+            checks.append(
+                _result(
+                    "cert-manager",
+                    "cert-manager CRDs",
+                    "error",
+                    "cert-manager CRDs not found. Install cert-manager or prepare TLS manually.",
+                )
+            )
+
+        issuer_name = cfg.onprem_cert_issuer_name or "letsencrypt-prod"
+        issuer_kind = (cfg.onprem_cert_issuer_kind or "ClusterIssuer").lower()
+        issuer_cmd = ["kubectl", "get", issuer_kind, issuer_name]
+        if issuer_kind == "issuer":
+            issuer_cmd.append("-A")
+        cert_issuer = subprocess.run(issuer_cmd, capture_output=True, text=True, check=False)
+        if cert_issuer.returncode == 0:
+            checks.append(
+                _result(
+                    "cert-issuer",
+                    "TLS issuer",
+                    "ok",
+                    f"{cfg.onprem_cert_issuer_kind or 'ClusterIssuer'}/{issuer_name} detected",
+                )
+            )
+        else:
+            checks.append(
+                _result(
+                    "cert-issuer",
+                    "TLS issuer",
+                    "warning",
+                    f"{cfg.onprem_cert_issuer_kind or 'ClusterIssuer'}/{issuer_name} not found yet.",
+                )
+            )
+
+    if issuer_cfg is not None:
+        if getattr(issuer_cfg, "base_domain", ""):
+            checks.append(_result("domain", "Issuer domain", "ok", issuer_cfg.base_domain))
+        else:
+            checks.append(_result("domain", "Issuer domain", "warning", "Base domain is still empty."))
+
+        if getattr(issuer_cfg, "rds_host", ""):
+            checks.append(_result("database", "Database host", "ok", issuer_cfg.rds_host))
+        else:
+            checks.append(_result("database", "Database host", "warning", "Database host has not been configured yet."))
+
+        if cluster_reachable and getattr(issuer_cfg, "mimoto_service_namespace", ""):
+            mimoto_ns = issuer_cfg.mimoto_service_namespace
+            mimoto = subprocess.run(
+                ["kubectl", "get", "namespace", mimoto_ns],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if mimoto.returncode == 0:
+                checks.append(_result("mimoto-namespace", "Mimoto namespace", "ok", f"Namespace {mimoto_ns} exists"))
+            else:
+                checks.append(_result("mimoto-namespace", "Mimoto namespace", "error", f"Namespace {mimoto_ns} was not found."))
+
+        source_ns = getattr(issuer_cfg, "shared_config_source_namespace", "")
+        if cluster_reachable and source_ns:
+            ns_check = subprocess.run(
+                ["kubectl", "get", "namespace", source_ns],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if ns_check.returncode == 0:
+                checks.append(_result("shared-config-namespace", "Shared config namespace", "ok", f"Namespace {source_ns} exists"))
+                missing: list[str] = []
+                found_maps: list[str] = []
+                for configmap in getattr(issuer_cfg, "shared_configmaps", []) or []:
+                    cm_check = subprocess.run(
+                        ["kubectl", "get", "configmap", configmap, "-n", source_ns],
+                        capture_output=True,
+                        text=True,
+                        check=False,
+                    )
+                    if cm_check.returncode == 0:
+                        found_maps.append(configmap)
+                    else:
+                        missing.append(configmap)
+                if missing:
+                    checks.append(
+                        _result(
+                            "shared-configmaps",
+                            "Shared ConfigMaps",
+                            "error",
+                            f"Missing ConfigMap(s) in {source_ns}: {', '.join(missing)}",
+                        )
+                    )
+                elif found_maps:
+                    checks.append(
+                        _result(
+                            "shared-configmaps",
+                            "Shared ConfigMaps",
+                            "ok",
+                            f"Found: {', '.join(found_maps)}",
+                        )
+                    )
+            else:
+                checks.append(
+                    _result(
+                        "shared-config-namespace",
+                        "Shared config namespace",
+                        "error",
+                        f"Namespace {source_ns} was not found.",
+                    )
+                )
+
+    if cfg.onprem_secrets_backend == "k8s":
+        checks.append(_result("secrets-backend", "Secrets backend", "ok", "Using Kubernetes Secrets"))
+
     if cfg.onprem_vault_addr:
         vault_token_env = cfg.onprem_vault_token_env or "VAULT_TOKEN"
         if os.environ.get(vault_token_env):
-            found.append(f"Vault: token found in ${vault_token_env}")
+            checks.append(_result("vault", "Vault access", "ok", f"Vault token found in ${vault_token_env}"))
         else:
-            issues.append(
-                f"Vault address configured ({cfg.onprem_vault_addr}) "
-                f"but ${vault_token_env} is not set."
+            checks.append(
+                _result(
+                    "vault",
+                    "Vault access",
+                    "error",
+                    f"Vault address configured ({cfg.onprem_vault_addr}) but ${vault_token_env} is not set.",
+                )
             )
 
-    # Harbor (optional — just check URL reachability)
+    if cfg.onprem_registry_backend:
+        checks.append(
+            _result(
+                "registry-backend",
+                "Registry backend",
+                "ok",
+                f"Selected backend: {cfg.onprem_registry_backend}",
+            )
+        )
+
     if cfg.onprem_harbor_url:
         import httpx
         try:
-            r = httpx.get(f"{cfg.onprem_harbor_url}/api/v2.0/ping",
-                          timeout=5, verify=False)
+            r = httpx.get(f"{cfg.onprem_harbor_url}/api/v2.0/ping", timeout=5, verify=False)
             if r.status_code in (200, 401):
-                found.append(f"Harbor: reachable at {cfg.onprem_harbor_url}")
+                checks.append(_result("harbor", "Harbor", "ok", f"Reachable at {cfg.onprem_harbor_url}"))
             else:
-                issues.append(f"Harbor at {cfg.onprem_harbor_url} returned {r.status_code}")
+                checks.append(_result("harbor", "Harbor", "warning", f"Harbor at {cfg.onprem_harbor_url} returned {r.status_code}"))
         except Exception as e:
-            issues.append(f"Cannot reach Harbor at {cfg.onprem_harbor_url}: {e}")
+            checks.append(_result("harbor", "Harbor", "warning", f"Cannot reach Harbor at {cfg.onprem_harbor_url}: {e}"))
 
-    # MinIO (optional)
     if cfg.onprem_minio_endpoint:
         try:
             import minio  # noqa: F401
         except ImportError:
-            issues.append("MinIO endpoint configured but the `minio` Python package is not installed.")
+            checks.append(_result("minio", "MinIO", "error", "MinIO endpoint configured but the `minio` Python package is not installed."))
         else:
             import httpx
             try:
-                r = httpx.get(f"{cfg.onprem_minio_endpoint}/minio/health/live",
-                              timeout=5, verify=False)
+                r = httpx.get(f"{cfg.onprem_minio_endpoint}/minio/health/live", timeout=5, verify=False)
                 if r.status_code == 200:
-                    found.append(f"MinIO: reachable at {cfg.onprem_minio_endpoint}")
+                    checks.append(_result("minio", "MinIO", "ok", f"Reachable at {cfg.onprem_minio_endpoint}"))
                 else:
-                    issues.append(f"MinIO at {cfg.onprem_minio_endpoint} returned {r.status_code}")
+                    checks.append(_result("minio", "MinIO", "warning", f"MinIO at {cfg.onprem_minio_endpoint} returned {r.status_code}"))
             except Exception as e:
-                issues.append(f"Cannot reach MinIO at {cfg.onprem_minio_endpoint}: {e}")
+                checks.append(_result("minio", "MinIO", "warning", f"Cannot reach MinIO at {cfg.onprem_minio_endpoint}: {e}"))
 
-    if issues:
-        return False, "On-premise checks failed:\n" + "\n".join(f"  • {i}" for i in issues)
+    ok, summary = _preflight_summary(checks)
+    return {
+        "ok": ok,
+        "provider": "onprem",
+        "summary": summary,
+        "checks": checks,
+    }
 
-    return True, "On-premise environment OK:\n" + "\n".join(f"  ✓ {f}" for f in found)
+
+def _check_onprem(cfg: CloudProviderConfig, issuer_cfg=None) -> tuple[bool, str]:
+    """Check on-premise tooling and readiness with a human-readable summary."""
+    report = _onprem_preflight_report(cfg, issuer_cfg=issuer_cfg)
+    status_lines = [
+        f"  {'✓' if item['status'] == 'ok' else '•'} {item['label']}: {item['detail']}"
+        for item in report["checks"]
+        if item["status"] in {"ok", "warning", "error"}
+    ]
+    heading = "On-premise environment OK:" if report["ok"] else "On-premise checks failed:"
+    return report["ok"], heading + "\n" + "\n".join(status_lines)
 
 
 # ── Provider factory ──────────────────────────────────────────

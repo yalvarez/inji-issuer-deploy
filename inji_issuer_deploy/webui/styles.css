@@ -71,11 +71,110 @@ code {
   grid-column: 1 / -1;
 }
 
+.wizard-card {
+  margin-bottom: 20px;
+}
+
+.wizard-strip {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.wizard-step {
+  border: 1px solid #d9e4f5;
+  border-radius: 14px;
+  padding: 12px;
+  background: #f9fbff;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.wizard-step-icon {
+  font-size: 24px;
+}
+
+.wizard-step-title {
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.wizard-step-text {
+  font-size: 13px;
+}
+
+.wizard-step-note {
+  margin-top: 6px;
+  font-size: 12px;
+}
+
+.wizard-summary {
+  margin-top: -4px;
+  margin-bottom: 14px;
+}
+
+.wizard-step-complete,
+.wizard-step-ok {
+  border-color: #9dd9af;
+  background: #f2fbf5;
+}
+
+.wizard-step-failed,
+.wizard-step-error {
+  border-color: #f3b7b2;
+  background: #fff6f5;
+}
+
+.wizard-step-in-progress,
+.wizard-step-warning {
+  border-color: #f4d37b;
+  background: #fffaf0;
+}
+
+.wizard-step-current {
+  box-shadow: inset 0 0 0 2px #0b5fff;
+}
+
+.wizard-step-locked {
+  opacity: 0.82;
+}
+
 .form-grid,
 .button-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
+}
+
+.phase-execution-list {
+  display: grid;
+  gap: 12px;
+}
+
+.phase-action-card {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  border: 1px solid #e3eaf7;
+  border-radius: 12px;
+  padding: 12px;
+  align-items: center;
+}
+
+.phase-action-card-current {
+  border-color: #0b5fff;
+  background: #f7faff;
+}
+
+.phase-action-card-locked {
+  background: #f8fafc;
+}
+
+.button-pair {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 label {
@@ -134,22 +233,26 @@ button:disabled {
   text-transform: uppercase;
 }
 
-.badge-complete {
+.badge-complete,
+.badge-ok {
   background: #def7e5;
   color: #0e7a35;
 }
 
-.badge-failed {
+.badge-failed,
+.badge-error {
   background: #fde2e1;
   color: #b42318;
 }
 
-.badge-in-progress {
+.badge-in-progress,
+.badge-warning {
   background: #fff0c2;
   color: #8a5a00;
 }
 
-.badge-pending {
+.badge-pending,
+.badge-info {
   background: #edf2ff;
   color: #3555aa;
 }
@@ -157,6 +260,11 @@ button:disabled {
 .helper,
 .muted {
   color: #5d6b82;
+}
+
+.phase-description {
+  margin-top: -4px;
+  margin-bottom: 12px;
 }
 
 .artifact-list {
@@ -179,8 +287,14 @@ button:disabled {
   .hero,
   .grid,
   .form-grid,
-  .button-grid {
+  .button-grid,
+  .wizard-strip {
     grid-template-columns: 1fr;
     display: grid;
+  }
+
+  .phase-action-card {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }

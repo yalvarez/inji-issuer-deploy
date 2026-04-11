@@ -44,8 +44,26 @@ def run_phase(name: str, state: st.DeployState, dry_run: bool = False) -> None:
         register.run(state, dry_run=dry_run)
 
 
+def phase_gate(state: st.DeployState, name: str) -> dict[str, Any]:
+    """Return whether a phase is unlocked based on completion of prior phases."""
+    norm = normalize_phase_choice(name)
+    idx = PHASE_ORDER.index(norm)
+    missing = [phase for phase in PHASE_ORDER[:idx] if not state.is_done(phase)]
+    locked = len(missing) > 0
+    locked_reason = ""
+    if missing:
+        locked_reason = f"Complete {PHASE_LABELS[missing[0]]} before continuing to {PHASE_LABELS[norm]}."
+    return {
+        "phase": norm,
+        "locked": locked,
+        "locked_reason": locked_reason,
+        "missing": missing,
+    }
+
+
 def _phase_status(state: st.DeployState, name: str) -> dict[str, Any]:
     phase = state.phase(name)
+    gate = phase_gate(state, name)
     if phase.completed:
         status = "complete"
     elif phase.error:
@@ -63,6 +81,8 @@ def _phase_status(state: st.DeployState, name: str) -> dict[str, Any]:
         "completed_at": phase.completed_at,
         "error": phase.error,
         "outputs": phase.outputs,
+        "locked": gate["locked"],
+        "locked_reason": gate["locked_reason"],
     }
 
 
@@ -86,6 +106,7 @@ def state_snapshot(state: st.DeployState) -> dict[str, Any]:
         "issuer": asdict(state.issuer),
         "provider_cfg": state.provider_cfg,
         "phases": [_phase_status(state, name) for name in PHASE_ORDER],
+        "next_phase": state.first_incomplete(),
         "created_at": state.created_at,
         "updated_at": state.updated_at,
         "artifacts": list_artifacts(state),

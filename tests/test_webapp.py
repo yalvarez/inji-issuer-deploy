@@ -74,3 +74,26 @@ def test_save_config_updates_state_and_marks_collect_done(tmp_path):
     assert state.provider_cfg["provider"] == "onprem"
     assert state.provider_cfg["provisioner"] == "python"
     assert state.is_done("collect") is True
+
+
+def test_webapp_blocks_running_later_phase_before_prerequisites(tmp_path):
+    state_file = tmp_path / "wizard-state.json"
+    os.environ[st.STATE_FILE_ENV] = str(state_file)
+
+    state = st.DeployState()
+    state.issuer.issuer_id = "wizard-demo"
+    state.provider_cfg = {"provider": "onprem", "provisioner": "python"}
+    state.mark_done("collect")
+    st.save_state(state)
+
+    client = TestClient(create_app())
+    response = client.post(
+        "/api/run/phase/deploy",
+        params={"state_file": str(state_file)},
+        json={"dry_run": True},
+    )
+
+    assert response.status_code == 400
+    payload = response.json()
+    assert payload["ok"] is False
+    assert "infrastructure" in payload["error"].lower() or "complete 1" in payload["error"].lower()

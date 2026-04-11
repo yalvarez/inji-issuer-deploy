@@ -6,6 +6,7 @@ Usage:
   inji-issuer-deploy run --from phase     # resume from a specific phase
   inji-issuer-deploy run --dry-run        # show what would happen without doing it
   inji-issuer-deploy status               # show current deployment state
+  inji-issuer-deploy preflight            # validate readiness before a real run
   inji-issuer-deploy web                  # launch the lightweight web dashboard
   inji-issuer-deploy bootstrap ubuntu-onprem  # prepare an Ubuntu VPS for on-prem installs
   inji-issuer-deploy reset                # clear saved state and start over
@@ -27,6 +28,7 @@ from rich.table import Table
 
 from inji_issuer_deploy import state as st
 from inji_issuer_deploy.bootstrap import bootstrap_ubuntu_onprem
+from inji_issuer_deploy.cloud import CloudProviderConfig, preflight_report
 from inji_issuer_deploy.orchestrator import (
     PHASE_LABELS,
     PHASE_ORDER,
@@ -168,6 +170,49 @@ def status(state_file: str | None):
             p.error[:80] if p.error else "—",
         )
     console.print(t)
+
+
+@main.command()
+@click.option("--state-file", default=None)
+def preflight(state_file: str | None):
+    """Validate deployment readiness before the first real run."""
+    import os
+    if state_file:
+        os.environ[st.STATE_FILE_ENV] = state_file
+
+    state = st.load_state()
+    raw_pc = getattr(state, "provider_cfg", None) or {}
+    provider_cfg = CloudProviderConfig(**raw_pc) if isinstance(raw_pc, dict) else raw_pc
+    if not provider_cfg.provider:
+        provider_cfg.provider = "onprem"
+    if not provider_cfg.provisioner:
+        provider_cfg.provisioner = "python"
+
+    report = preflight_report(provider_cfg, state.issuer)
+
+    provider_title = "On-prem" if provider_cfg.provider == "onprem" else provider_cfg.provider.upper()
+    console.print(Panel(
+        f"[bold]{provider_title} readiness report[/bold]\n{report['summary']}",
+        border_style="green" if report["ok"] else "yellow",
+    ))
+
+    table = Table(show_header=True, header_style="bold")
+    table.add_column("Check")
+    table.add_column("Status")
+    table.add_column("Detail")
+    for item in report["checks"]:
+        status = item["status"]
+        color = {
+            "ok": "green",
+            "warning": "yellow",
+            "error": "red",
+            "info": "cyan",
+        }.get(status, "white")
+        table.add_row(item["label"], f"[{color}]{status}[/{color}]", item["detail"])
+    console.print(table)
+
+    if not report["ok"]:
+        raise click.exceptions.Exit(1)
 
 
 @main.command()

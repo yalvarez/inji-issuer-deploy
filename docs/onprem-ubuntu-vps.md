@@ -57,3 +57,9 @@ Then continue with the normal workflow:
 inji-issuer-deploy phase collect
 inji-issuer-deploy run
 ```
+
+For the full first real execution sequence on Ubuntu + `k3s`, continue with:
+
+```text
+docs/onprem-first-real-runbook.md
+```

@@ -175,7 +175,7 @@ def run(state: DeployState, dry_run: bool = False) -> None:
 
     # Verify credentials before touching anything
     console.print(f"\n  [bold]Verifying {provider_cfg.provider.upper()} credentials...[/bold]")
-    ok, message = check_and_explain(provider_cfg)
+    ok, message = check_and_explain(provider_cfg, cfg)
     print_credential_status(provider_cfg.provider, ok, message)
     if not ok:
         raise RuntimeError(

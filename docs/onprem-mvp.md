@@ -57,8 +57,9 @@ A ready-to-use example state and walkthrough are included here:
 
 - `docs/examples/onprem-example-state.json`
 - `docs/examples/onprem-simulation.md`
+- `docs/onprem-first-real-runbook.md`
 
-Use them to rehearse `infra --dry-run`, `config`, and `deploy --dry-run` without touching any cloud.
+Use them to rehearse `infra --dry-run`, `config`, and `deploy --dry-run` without touching any cloud, then follow the final Ubuntu + `k3s` runbook for the first controlled real install.
 
 ## Optional upgrades later
 

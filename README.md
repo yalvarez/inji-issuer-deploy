@@ -82,11 +82,12 @@ inji-issuer-deploy phase config --dry-run
 inji-issuer-deploy run
 ```
 
-If you want to rehearse the cycle before the first real deployment, use the examples in:
+If you want to rehearse the cycle before the first real deployment, use the guides in:
 
 ```text
 docs/examples/onprem-simulation.md
 docs/onprem-ubuntu-vps.md
+docs/onprem-first-real-runbook.md
 ```
 
 ### General workflow
@@ -97,6 +98,9 @@ inji-issuer-deploy run
 
 # Preview without making changes
 inji-issuer-deploy run --dry-run
+
+# Validate readiness before a real deployment
+inji-issuer-deploy preflight
 
 # Check status of an in-progress deployment
 inji-issuer-deploy status

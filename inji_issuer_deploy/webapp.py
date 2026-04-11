@@ -12,11 +12,12 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from inji_issuer_deploy import state as st
-from inji_issuer_deploy.cloud import CloudProviderConfig, check_and_explain
+from inji_issuer_deploy.cloud import CloudProviderConfig, preflight_report
 from inji_issuer_deploy.orchestrator import (
     PHASE_LABELS,
     list_artifacts,
     normalize_phase_choice,
+    phase_gate,
     run_phase,
     state_snapshot,
     update_state_from_payload,
@@ -127,12 +128,7 @@ def create_app() -> FastAPI:
                 provider_cfg.provider = "onprem"
             if not provider_cfg.provisioner:
                 provider_cfg.provisioner = "python"
-            ok, message = check_and_explain(provider_cfg)
-            return {
-                "ok": ok,
-                "provider": provider_cfg.provider,
-                "message": message,
-            }
+            return preflight_report(provider_cfg, state.issuer)
 
     @app.post("/api/run/phase/{phase_name}")
     def run_phase_endpoint(
@@ -157,6 +153,18 @@ def create_app() -> FastAPI:
         buffer = io.StringIO()
         with use_state_file(state_file):
             state = st.load_state()
+            gate = phase_gate(state, phase_name)
+            if gate["locked"]:
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "ok": False,
+                        "phase": st.normalize_phase_name(phase_name),
+                        "dry_run": request.dry_run,
+                        "error": gate["locked_reason"],
+                        "state": state_snapshot(state),
+                    },
+                )
             try:
                 with redirect_stdout(buffer), redirect_stderr(buffer):
                     run_phase(phase_name, state, dry_run=request.dry_run)
