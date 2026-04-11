@@ -3,6 +3,7 @@
         ".\\.venv\\Scripts\\python.exe": true,
         "&": true,
         "Get-Command": true,
-        "inji-issuer-deploy": true
+        "inji-issuer-deploy": true,
+        "c:/Users/yalva/source/repos/inji-issuer-deploy/.venv-1/Scripts/python.exe": true
     }
 }
