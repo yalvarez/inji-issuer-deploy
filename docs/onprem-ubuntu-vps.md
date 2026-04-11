@@ -11,6 +11,8 @@ There are two supported modes:
 
 ## Quick start
 
+> On current Ubuntu releases, avoid installing directly into the system Python. Create and activate a project `.venv` first, otherwise `pip` may stop with `externally-managed-environment`.
+
 ### Dry-run the bootstrap plan
 
 ```bash
@@ -54,6 +56,9 @@ inji-issuer-deploy phase infra --dry-run
 Then continue with the normal workflow:
 
 ```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e .
 inji-issuer-deploy phase collect
 inji-issuer-deploy run
 ```

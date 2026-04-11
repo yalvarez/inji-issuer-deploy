@@ -61,9 +61,30 @@ This prepares:
 - MOSIP Helm repo
 - optional `k3s`
 
+> On Ubuntu 23.04+ / Debian 12+, do not rely on the system Python for `pip install -e .`. Use the project virtual environment (`python3 -m venv .venv` and `source .venv/bin/activate`) to avoid the `externally-managed-environment` blocker.
+
 ---
 
-## 4. Validate the host and cluster
+## 4. Create and activate the project virtual environment
+
+From the repository root on the Ubuntu VPS:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y python3-venv python3-pip
+python3 -m venv .venv
+source .venv/bin/activate
+pip install --upgrade pip
+pip install -e .
+```
+
+If the command is not yet on `PATH`, you can still run:
+
+```bash
+python -m inji_issuer_deploy.cli --help
+```
+
+## 5. Validate the host and cluster
 
 Before touching the real deploy phases, verify the operator environment:
 
@@ -78,7 +99,7 @@ You should not continue until the required checks are green or clearly understoo
 
 ---
 
-## 5. Install `cert-manager` if needed
+## 6. Install `cert-manager` if needed
 
 If the preflight reports that `cert-manager` is missing, install it first.
 
@@ -102,7 +123,7 @@ If you already have an internal CA or an existing `ClusterIssuer`, use that issu
 
 ---
 
-## 6. Prepare the minimum shared services
+## 7. Prepare the minimum shared services
 
 For the first real run, make sure these are available:
 
@@ -124,7 +145,7 @@ If your environment does **not** use the RENIEC defaults, that is fine — just 
 
 ---
 
-## 7. Collect the issuer configuration
+## 8. Collect the issuer configuration
 
 Start the normal flow:
 
@@ -145,7 +166,7 @@ Recommended values for the first real install:
 
 ---
 
-## 8. Run the deployment in controlled stages
+## 9. Run the deployment in controlled stages
 
 ### Stage 1 — readiness check
 
@@ -195,7 +216,7 @@ If something fails mid-run, fix the issue and rerun the same command. The state 
 
 ---
 
-## 9. Post-deploy verification checklist
+## 10. Post-deploy verification checklist
 
 After the first real run, verify at least:
 
@@ -222,7 +243,7 @@ curl -k https://<base-domain>/.well-known/openid-credential-issuer
 
 ---
 
-## 10. Recovery guidance
+## 11. Recovery guidance
 
 If the first attempt does not complete:
 
@@ -241,7 +262,7 @@ Do **not** reset the state unless you really want to start over.
 
 ---
 
-## 11. What to postpone until after the first success
+## 12. What to postpone until after the first success
 
 These are useful, but not necessary for the first production-style validation:
 

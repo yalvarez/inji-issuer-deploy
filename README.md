@@ -44,8 +44,12 @@ Or from source:
 ```bash
 git clone https://github.com/yalvarez/inji-issuer-deploy.git
 cd inji-issuer-deploy
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -e .
 ```
+
+> On recent Ubuntu/Debian systems, `pip install -e .` against the system Python may fail with `externally-managed-environment` (PEP 668). Use a virtual environment as shown above.
 
 ## Quick start
 
@@ -54,7 +58,7 @@ pip install -e .
 The CLI remains the **source of truth**. The new web dashboard is only a thin operational layer over the same Python phase engine and `inji-deploy-state.json`, so future cloud support stays CLI-first as well.
 
 ```bash
-pip install -e .
+# after activating the project virtual environment
 inji-issuer-deploy web
 ```
 
