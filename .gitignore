@@ -23,6 +23,8 @@ ENV/
 build/
 dist/
 site/
+node_modules/
+*.tsbuildinfo
 *.egg-info/
 .eggs/
 pip-wheel-metadata/
@@ -30,7 +32,9 @@ pip-wheel-metadata/
 # Local deployment state and generated workspace data
 .inji-deploy/
 inji-deploy-state.json
+inji-deploy-state*.json
 demo-onprem-state.json
+bootstrap-ubuntu-onprem.sh
 *.log
 
 # Terraform local state

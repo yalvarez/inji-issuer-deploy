@@ -6,6 +6,8 @@ Usage:
   inji-issuer-deploy run --from phase     # resume from a specific phase
   inji-issuer-deploy run --dry-run        # show what would happen without doing it
   inji-issuer-deploy status               # show current deployment state
+  inji-issuer-deploy web                  # launch the lightweight web dashboard
+  inji-issuer-deploy bootstrap ubuntu-onprem  # prepare an Ubuntu VPS for on-prem installs
   inji-issuer-deploy reset                # clear saved state and start over
   inji-issuer-deploy phase collect        # run only Phase 0
   inji-issuer-deploy phase infra          # run only Phase 1
@@ -24,51 +26,24 @@ from rich.panel import Panel
 from rich.table import Table
 
 from inji_issuer_deploy import state as st
-from inji_issuer_deploy.phases import (
-    collect,
-    infra,
-    config_gen,
-    k8s_deploy,
-    register,
+from inji_issuer_deploy.bootstrap import bootstrap_ubuntu_onprem
+from inji_issuer_deploy.orchestrator import (
+    PHASE_LABELS,
+    PHASE_ORDER,
+    normalize_phase_choice,
+    run_phase as _run_phase,
 )
 
 console = Console()
-
-PHASE_ORDER = list(st.PHASE_ORDER)
-PHASE_LABELS = {
-    "collect":    "0 — data collection",
-    "infra":      "1 — infrastructure provisioning",
-    "config_gen": "2 — configuration generation",
-    "k8s_deploy": "3 — Kubernetes deployment",
-    "register":   "4 — credential registration",
-}
 
 
 def _normalize_phase_choice(name: str | None) -> str | None:
     if not name:
         return None
-    norm = st.normalize_phase_name(name)
-    if norm not in PHASE_ORDER:
-        raise click.BadParameter(
-            "Use one of: collect, infra, config, deploy, register"
-        )
-    return norm
-
-
-def _run_phase(name: str, state, dry_run: bool) -> None:
-    """Dispatch to the correct phase module."""
-    if name == "collect":
-        collect.run(state)
-        state.mark_done("collect")
-        st.save_state(state)
-    elif name == "infra":
-        infra.run(state, dry_run=dry_run)
-    elif name == "config_gen":
-        config_gen.run(state, dry_run=dry_run)
-    elif name == "k8s_deploy":
-        k8s_deploy.run(state, dry_run=dry_run)
-    elif name == "register":
-        register.run(state, dry_run=dry_run)
+    try:
+        return normalize_phase_choice(name)
+    except ValueError as exc:
+        raise click.BadParameter(str(exc)) from exc
 
 
 # ── commands ──────────────────────────────────────────────────
@@ -207,6 +182,42 @@ def reset(state_file: str | None):
     console.print("[green]State cleared.[/green]")
 
 
+@main.command()
+@click.option("--host", default="127.0.0.1", show_default=True)
+@click.option("--port", default=8000, type=int, show_default=True)
+def web(host: str, port: int):
+    """Launch the lightweight web dashboard backed by the CLI engine."""
+    try:
+        import uvicorn
+    except ImportError as exc:
+        raise click.ClickException(
+            "The web UI needs FastAPI/Uvicorn. Reinstall the project with: pip install -e ."
+        ) from exc
+
+    console.print(Panel(
+        f"[bold cyan]Starting Inji Issuer Deploy UI[/bold cyan]\n"
+        f"Open [link=http://{host}:{port}]http://{host}:{port}[/link] in your browser.\n"
+        "The web app reuses the same state file and phase engine as the CLI.",
+        border_style="cyan",
+    ))
+    uvicorn.run("inji_issuer_deploy.webapp:app", host=host, port=port, reload=False)
+
+
+@main.group()
+def bootstrap():
+    """Prepare operator environments while keeping the CLI as the deployment engine."""
+    pass
+
+
+@bootstrap.command("ubuntu-onprem")
+@click.option("--dry-run/--no-dry-run", default=True, show_default=True)
+@click.option("--with-k3s", is_flag=True, default=False, help="Also install k3s for a single-node lab cluster.")
+@click.option("--write-script", default=None, help="Write the generated bootstrap script to a file.")
+def bootstrap_ubuntu_onprem_command(dry_run: bool, with_k3s: bool, write_script: str | None):
+    """Prepare an Ubuntu VPS for on-prem deployment dependencies."""
+    bootstrap_ubuntu_onprem(dry_run=dry_run, with_k3s=with_k3s, write_script_path=write_script)
+
+
 @main.group()
 def phase():
     """Run a single deployment phase."""
@@ -221,9 +232,7 @@ def phase_collect(state_file):
     if state_file:
         os.environ[st.STATE_FILE_ENV] = state_file
     state = st.load_state()
-    collect.run(state)
-    state.mark_done("collect")
-    st.save_state(state)
+    _run_phase("collect", state)
 
 
 @phase.command("infra")
@@ -235,7 +244,7 @@ def phase_infra(dry_run, state_file):
     if state_file:
         os.environ[st.STATE_FILE_ENV] = state_file
     state = st.load_state()
-    infra.run(state, dry_run=dry_run)
+    _run_phase("infra", state, dry_run=dry_run)
 
 
 @phase.command("aws-infra")
@@ -247,7 +256,7 @@ def phase_aws_alias(dry_run, state_file):
     if state_file:
         os.environ[st.STATE_FILE_ENV] = state_file
     state = st.load_state()
-    infra.run(state, dry_run=dry_run)
+    _run_phase("infra", state, dry_run=dry_run)
 
 
 @phase.command("config")
@@ -259,7 +268,7 @@ def phase_config(dry_run, state_file):
     if state_file:
         os.environ[st.STATE_FILE_ENV] = state_file
     state = st.load_state()
-    config_gen.run(state, dry_run=dry_run)
+    _run_phase("config_gen", state, dry_run=dry_run)
 
 
 @phase.command("deploy")
@@ -271,7 +280,7 @@ def phase_deploy(dry_run, state_file):
     if state_file:
         os.environ[st.STATE_FILE_ENV] = state_file
     state = st.load_state()
-    k8s_deploy.run(state, dry_run=dry_run)
+    _run_phase("k8s_deploy", state, dry_run=dry_run)
 
 
 @phase.command("register")
@@ -283,7 +292,7 @@ def phase_register(dry_run, state_file):
     if state_file:
         os.environ[st.STATE_FILE_ENV] = state_file
     state = st.load_state()
-    register.run(state, dry_run=dry_run)
+    _run_phase("register", state, dry_run=dry_run)
 
 
 if __name__ == "__main__":

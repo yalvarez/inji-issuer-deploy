@@ -16,6 +16,8 @@ dependencies = [
     "rich>=13.7",
     "pyyaml>=6.0",
     "minio>=7.2",
+    "fastapi>=0.115",
+    "uvicorn>=0.30",
 ]
 
 [project.scripts]
@@ -24,3 +26,6 @@ inji-issuer-deploy = "inji_issuer_deploy.cli:main"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["inji_issuer_deploy*"]
+
+[tool.setuptools.package-data]
+inji_issuer_deploy = ["webui/*"]

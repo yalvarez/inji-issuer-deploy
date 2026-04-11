@@ -49,9 +49,32 @@ pip install -e .
 
 ## Quick start
 
+### Web UI (MVP)
+
+The CLI remains the **source of truth**. The new web dashboard is only a thin operational layer over the same Python phase engine and `inji-deploy-state.json`, so future cloud support stays CLI-first as well.
+
+```bash
+pip install -e .
+inji-issuer-deploy web
+```
+
+Then open:
+
+```text
+http://127.0.0.1:8000
+```
+
+In the MVP:
+- **Phase 0** is handled through a form in the browser
+- **Phases 1–4** call the same backend logic used by the CLI
+- the current state and generated artifacts remain visible in one place
+
 ### On-prem MVP (recommended)
 
 ```bash
+# Optional: prepare an Ubuntu VPS as the operator host or a single-node k3s lab
+inji-issuer-deploy bootstrap ubuntu-onprem --dry-run
+
 # First run: choose provider=onprem and provisioner=python in Phase 0
 inji-issuer-deploy phase collect
 inji-issuer-deploy phase infra --dry-run
@@ -59,10 +82,11 @@ inji-issuer-deploy phase config --dry-run
 inji-issuer-deploy run
 ```
 
-If you want to rehearse the cycle before the first real deployment, use the example in:
+If you want to rehearse the cycle before the first real deployment, use the examples in:
 
 ```text
 docs/examples/onprem-simulation.md
+docs/onprem-ubuntu-vps.md
 ```
 
 ### General workflow
