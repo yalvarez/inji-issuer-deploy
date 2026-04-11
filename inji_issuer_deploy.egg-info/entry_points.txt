@@ -1,2 +1,0 @@
-[console_scripts]
-inji-issuer-deploy = inji_issuer_deploy.cli:main
