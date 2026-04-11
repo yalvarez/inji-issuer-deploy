@@ -42,7 +42,7 @@ pip install inji-issuer-deploy
 Or from source:
 
 ```bash
-git clone https://github.com/IUGO-RENIEC/inji-issuer-deploy
+git clone https://github.com/yalvarez/inji-issuer-deploy.git
 cd inji-issuer-deploy
 pip install -e .
 ```
