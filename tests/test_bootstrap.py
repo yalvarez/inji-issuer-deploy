@@ -22,6 +22,13 @@ def test_render_ubuntu_onprem_script_includes_k3s_when_requested():
     assert "curl -sfL https://get.k3s.io | sh -" in script
 
 
+def test_render_ubuntu_onprem_script_uses_preflight_not_infra_phase():
+    script = render_ubuntu_onprem_script(with_k3s=True)
+
+    assert "inji-issuer-deploy preflight" in script
+    assert "phase infra --dry-run" not in script
+
+
 def test_cli_bootstrap_dry_run_outputs_plan_and_writes_script(tmp_path):
     runner = CliRunner()
     script_path = tmp_path / "bootstrap-ubuntu-onprem.sh"

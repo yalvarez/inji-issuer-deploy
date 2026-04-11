@@ -84,6 +84,14 @@ If the command is not yet on `PATH`, you can still run:
 python -m inji_issuer_deploy.cli --help
 ```
 
+If you want to use the web dashboard from another machine, start it like this:
+
+```bash
+inji-issuer-deploy web --host 0.0.0.0 --port 8000
+```
+
+and allow external access to `8000/tcp` on the VPS firewall/security group.
+
 ## 5. Validate the host and cluster
 
 Before touching the real deploy phases, verify the operator environment:
@@ -173,6 +181,12 @@ Recommended values for the first real install:
 ```bash
 inji-issuer-deploy preflight
 ```
+
+> If you are validating a fresh Ubuntu host before collecting the real issuer data, you can also use a temporary state file to keep the check provider-neutral:
+>
+> ```bash
+> INJI_STATE_FILE=/tmp/inji-bootstrap-state.json inji-issuer-deploy preflight
+> ```
 
 ### Stage 2 — infrastructure dry run
 

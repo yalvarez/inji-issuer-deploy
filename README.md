@@ -59,14 +59,22 @@ The CLI remains the **source of truth**. The new web dashboard is only a thin op
 
 ```bash
 # after activating the project virtual environment
-inji-issuer-deploy web
+inji-issuer-deploy web --host 0.0.0.0 --port 8000
 ```
 
-Then open:
+Then open from the same server:
 
 ```text
 http://127.0.0.1:8000
 ```
+
+Or from another machine, using the VPS public IP or DNS name:
+
+```text
+http://<VPS-IP>:8000
+```
+
+> If you need external browser access, make sure port `8000/tcp` is allowed in the VPS firewall / cloud security group.
 
 In the MVP:
 - **Phase 0** is handled through a form in the browser

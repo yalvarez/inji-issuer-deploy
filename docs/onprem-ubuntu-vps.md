@@ -44,13 +44,29 @@ inji-issuer-deploy bootstrap ubuntu-onprem --with-k3s --no-dry-run
 
 ## After bootstrap
 
-Validate the environment:
+Validate the environment first with a provider-neutral preflight:
 
 ```bash
 kubectl config current-context
 kubectl cluster-info
 helm version
-inji-issuer-deploy phase infra --dry-run
+INJI_STATE_FILE=/tmp/inji-bootstrap-state.json inji-issuer-deploy preflight
+```
+
+Then, once your real Phase 0 configuration has been collected, continue with `phase infra --dry-run`.
+
+If you want to reach the web UI from outside the VPS, start it bound to all interfaces:
+
+```bash
+source .venv/bin/activate
+inji-issuer-deploy web --host 0.0.0.0 --port 8000
+```
+
+Then allow the port in the firewall. For example with `ufw`:
+
+```bash
+sudo ufw allow 8000/tcp
+sudo ufw status
 ```
 
 Then continue with the normal workflow:

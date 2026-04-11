@@ -56,7 +56,7 @@ def ubuntu_onprem_steps(with_k3s: bool = False) -> list[tuple[str, str]]:
             ),
             (
                 "Validation",
-                "kubectl cluster-info ; helm version ; inji-issuer-deploy phase infra --dry-run",
+                "kubectl cluster-info ; helm version ; INJI_STATE_FILE=/tmp/inji-bootstrap-state.json inji-issuer-deploy preflight || true",
             ),
         ]
     )
@@ -114,7 +114,10 @@ def render_ubuntu_onprem_script(with_k3s: bool = False) -> str:
             "kubectl config current-context || true",
             "kubectl cluster-info",
             "helm version",
-            "inji-issuer-deploy phase infra --dry-run",
+            "BOOTSTRAP_STATE_FILE=/tmp/inji-bootstrap-state.json",
+            "rm -f \"$BOOTSTRAP_STATE_FILE\"",
+            "INJI_STATE_FILE=\"$BOOTSTRAP_STATE_FILE\" inji-issuer-deploy preflight || true",
+            "echo 'Bootstrap validation finished. If preflight reported remaining issues, fix them and re-run: INJI_STATE_FILE=\"$BOOTSTRAP_STATE_FILE\" inji-issuer-deploy preflight'",
             "echo 'Ubuntu on-prem bootstrap complete.'",
             "",
         ]
