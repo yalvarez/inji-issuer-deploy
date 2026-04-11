@@ -1,0 +1,80 @@
+{
+  "issuer": {
+    "issuer_id": "mtc",
+    "issuer_name": "Ministerio de Transportes y Comunicaciones",
+    "issuer_description": "Credenciales emitidas por el MTC de Peru",
+    "issuer_logo_url": "http://mtc.gov.pu/logo.svg",
+    "base_domain": "certify.mtc.gob.pe",
+    "aws_region": "sa-east-1",
+    "aws_account_id": "123456789098",
+    "eks_cluster_name": "INJI-prod",
+    "rds_host": "inji-prod-postgress-mtc-sa-east-1.rds.amazonaws.com",
+    "rds_port": 5432,
+    "rds_admin_secret_arn": "dsdsdsdsdsd",
+    "idperu_jwks_uri": "https://idperu.gob.pe/v1/idperu/oauth/.well-known/jwks.json",
+    "idperu_issuer_uri": "https://idperu.gob.pe/v1/idperu",
+    "data_api_base_url": "https://api.licencias.mtc.gob.pe",
+    "data_api_auth_type": "oauth2",
+    "data_api_secret_arn": "casdsdsdadasd",
+    "data_api_token_url": "https://api.licencias.mtc.gob.pe",
+    "scope_mappings": [
+      {
+        "scope": "licencia-conducir",
+        "profile": "LICENCIA_CONDUCIR",
+        "service": "/v1/licencias/obtener",
+        "display_name": "Licencia de Conducir",
+        "requires_filiation": false
+      }
+    ],
+    "document_number_claim": "individualId",
+    "filiation_claim": "",
+    "mimoto_issuers_s3_bucket": "mimoto-ussuers-config.json",
+    "mimoto_issuers_s3_key": "mimoto-issuers-config.json",
+    "mimoto_service_namespace": "mimoto",
+    "mimoto_service_name": "mimoto",
+    "certify_image": "mosipid/inji-certify-with-plugins:0.12.2",
+    "chart_version": "0.12.2",
+    "softhsm_chart_version": "1.3.0-beta.2",
+    "node_selector": {}
+  },
+  "provider_cfg": {},
+  "phases": {
+    "collect": {
+      "completed": true,
+      "started_at": "",
+      "completed_at": "2026-04-11T16:38:15.796788+00:00",
+      "outputs": {},
+      "error": ""
+    },
+    "aws_infra": {
+      "completed": false,
+      "started_at": "2026-04-11T16:45:25.208964+00:00",
+      "completed_at": "",
+      "outputs": {},
+      "error": "kubectl cannot reach the Kubernetes cluster: Set your kubeconfig/current context for the target cluster and retry.\nOriginal error: E0411 12:45:25.611520   22216 memcache.go:265] \"Unhandled Error\" err=\"couldn't get current server API group list: Get \\\"http://localhost:8080/api?timeout=32s\\\": dial tcp [::1]:8080: connectex: No connection could be made because the target machine actively refused it.\"\nE0411 12:45:25.612683   22216 memcache.go:265] \"Unhandled Error\" err=\"couldn't get current server API group list: Get \\\"http://localhost:8080/api?timeout=32s\\\": dial tcp [::1]:8080: connectex: No connection could be made because the target machine actively refused it.\"\nE0411 12:45:25.614732   22216 memcache.go:265] \"Unhandled Error\" err=\"couldn't get current server API group list: Get \\\"http://localhost:8080/api?timeout=32s\\\": dial tcp [::1]:8080: connectex: No connection could be made because the target machine actively refused it.\"\nE0411 12:45:25.615773   22216 memcache.go:265] \"Unhandled Error\" err=\"couldn't get current server API group list: Get \\\"http://localhost:8080/api?timeout=32s\\\": dial tcp [::1]:8080: connectex: No connection could be made because the target machine actively refused it.\"\nE0411 12:45:25.616806   22216 memcache.go:265] \"Unhandled Error\" err=\"couldn't get current server API group list: Get \\\"http://localhost:8080/api?timeout=32s\\\": dial tcp [::1]:8080: connectex: No connection could be made because the target machine actively refused it.\"\nUnable to connect to the server: dial tcp [::1]:8080: connectex: No connection could be made because the target machine actively refused it."
+    },
+    "config_gen": {
+      "completed": false,
+      "started_at": "",
+      "completed_at": "",
+      "outputs": {},
+      "error": ""
+    },
+    "k8s_deploy": {
+      "completed": false,
+      "started_at": "",
+      "completed_at": "",
+      "outputs": {},
+      "error": ""
+    },
+    "register": {
+      "completed": false,
+      "started_at": "",
+      "completed_at": "",
+      "outputs": {},
+      "error": ""
+    }
+  },
+  "created_at": "2026-04-11T16:29:59.815235+00:00",
+  "updated_at": "2026-04-11T16:45:25.622510+00:00"
+}
