@@ -214,6 +214,25 @@ resources:
 additionalResources:
   javaOpts: "-Xms1500M -Xmx1500M"
 
+{% if provider == 'onprem' %}
+istio:
+  enabled: false
+
+ingress:
+  enabled: true
+  className: traefik
+  annotations:
+    cert-manager.io/{{ cert_issuer_kind | lower }}: {{ cert_issuer_name }}
+  hosts:
+    - host: {{ base_domain }}
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: inji-{{ issuer_id }}-tls
+      hosts:
+        - {{ base_domain }}
+{% else %}
 istio:
   enabled: true
   hosts:
@@ -226,6 +245,7 @@ istio:
     - matchType: prefix
       uri: /
       port: 80
+{% endif %}
 
 extraEnvVarsCM:
   - inji-{{ issuer_id }}-config
@@ -260,7 +280,7 @@ serviceAccount:
 metrics:
   enabled: true
   serviceMonitor:
-    enabled: true
+    enabled: {{ 'false' if provider == 'onprem' else 'true' }}
     interval: 10s
 """
 
@@ -356,6 +376,11 @@ def run(state: DeployState, dry_run: bool = False) -> None:
     # Derive mimoto domain from S3 bucket name or use a default
     mimoto_domain = f"mimoto.{'.'.join(cfg.base_domain.split('.')[-2:])}"
 
+    raw_pc = getattr(state, "provider_cfg", None) or {}
+    provider = raw_pc.get("provider", "onprem") if isinstance(raw_pc, dict) else getattr(raw_pc, "provider", "onprem")
+    cert_issuer_kind = raw_pc.get("onprem_cert_issuer_kind", "ClusterIssuer") if isinstance(raw_pc, dict) else getattr(raw_pc, "onprem_cert_issuer_kind", "ClusterIssuer")
+    cert_issuer_name = raw_pc.get("onprem_cert_issuer_name", "letsencrypt-prod") if isinstance(raw_pc, dict) else getattr(raw_pc, "onprem_cert_issuer_name", "letsencrypt-prod")
+
     context = {
         "issuer_id":             cfg.issuer_id,
         "issuer_name":           cfg.issuer_name,
@@ -377,6 +402,9 @@ def run(state: DeployState, dry_run: bool = False) -> None:
         "pod_identity_role_arn": infra.get("pod_identity_role_arn", ""),
         "mimoto_domain":         mimoto_domain,
         "namespace":             f"inji-{cfg.issuer_id}",
+        "provider":              provider,
+        "cert_issuer_kind":      cert_issuer_kind,
+        "cert_issuer_name":      cert_issuer_name,
     }
 
     if dry_run:

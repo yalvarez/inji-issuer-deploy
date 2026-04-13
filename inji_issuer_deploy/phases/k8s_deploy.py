@@ -249,7 +249,8 @@ def _install_softhsm(cfg, ns: str, softhsm_values: Path) -> None:
 
 def _install_certify(cfg, ns: str,
                      certify_properties: Path,
-                     helm_values: Path) -> None:
+                     helm_values: Path,
+                     provider: str = "onprem") -> None:
     release = f"inji-certify-{cfg.issuer_id}"
     chart_ref = getattr(cfg, "certify_chart_ref", "mosip/inji-certify")
     if _helm_release_exists(ns, release):
@@ -258,23 +259,24 @@ def _install_certify(cfg, ns: str,
     _step(f"installing inji-certify {release}")
 
     # Store the properties file as a ConfigMap in the namespace
-    _run([
+    r = _run([
         "kubectl", "create", "configmap",
         f"certify-{cfg.issuer_id}-props",
         "-n", ns,
         f"--from-file=certify-{cfg.issuer_id}.properties={certify_properties}",
-        "--dry-run=client", "-o", "yaml",
-    ])
-    # Apply it properly
-    import subprocess as sp
-    r = sp.run([
-        "kubectl", "create", "configmap",
-        f"certify-{cfg.issuer_id}-props",
-        "-n", ns,
-        f"--from-file=certify-{cfg.issuer_id}.properties={certify_properties}",
-    ], capture_output=True, text=True, check=False)
-    if r.returncode != 0 and "already exists" not in r.stderr:
+    ], check=False)
+    if r.returncode != 0 and "already exists" not in (r.stderr or ""):
         raise RuntimeError(f"Failed to create certify configmap: {r.stderr}")
+
+    # Safety-net --set overrides so even a stale values file works correctly
+    extra_sets: list[str] = []
+    if provider == "onprem":
+        extra_sets += [
+            "--set", "istio.enabled=false",
+            "--set", "metrics.serviceMonitor.enabled=false",
+        ]
+    else:
+        extra_sets += ["--set", f"istio.hosts[0]={cfg.base_domain}"]
 
     _run_streamed([
         "helm", "-n", ns,
@@ -282,7 +284,7 @@ def _install_certify(cfg, ns: str,
         chart_ref,
         "-f", str(helm_values),
         "--version", cfg.chart_version,
-        "--set", f"istio.hosts[0]={cfg.base_domain}",
+        *extra_sets,
     ])
     _wait_rollout(ns, f"inji-certify-{cfg.issuer_id}")
     _ok(f"inji-certify installed for {cfg.issuer_id}")
@@ -385,6 +387,9 @@ def run(state: DeployState, dry_run: bool = False) -> None:
     state.mark_started("k8s_deploy")
     outputs: dict = {}
 
+    raw_pc = getattr(state, "provider_cfg", None) or {}
+    provider_name = raw_pc.get("provider", "onprem") if isinstance(raw_pc, dict) else getattr(raw_pc, "provider", "onprem")
+
     try:
         _ensure_namespace(ns)
 
@@ -420,7 +425,7 @@ def run(state: DeployState, dry_run: bool = False) -> None:
 
         # 5. Certify
         console.print("\n  [bold]5. inji-certify[/bold]")
-        _install_certify(cfg, ns, certify_props, helm_values)
+        _install_certify(cfg, ns, certify_props, helm_values, provider=provider_name)
         outputs["certify_installed"] = True
         outputs["certify_url"] = f"https://{cfg.base_domain}/v1/certify"
 
