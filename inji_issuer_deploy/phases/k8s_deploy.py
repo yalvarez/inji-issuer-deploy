@@ -60,8 +60,8 @@ def _run_streamed(cmd: list[str], check: bool = True) -> int:
     return proc.returncode
 
 
-def _helm(*args: str) -> subprocess.CompletedProcess:
-    return _run(["helm", *args])
+def _helm(*args: str, check: bool = True) -> subprocess.CompletedProcess:
+    return _run(["helm", *args], check=check)
 
 
 def _kubectl(*args: str, check: bool = True) -> subprocess.CompletedProcess:
