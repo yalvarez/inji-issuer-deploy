@@ -458,7 +458,7 @@ def run(state: DeployState, dry_run: bool = False) -> None:
                 )
                 _ok(f"Secret {db_secret} created in {ns}")
                 # Guardar en el estado
-                state.db_credentials = {"username": db_user, "password": db_pass}
+                state.db_credentials = {"username": db_user, "password": db_pass, "secret_name": db_secret}
                 save_state(state)
 
         # 2. Apply issuer ConfigMap
