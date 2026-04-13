@@ -247,6 +247,23 @@ istio:
       port: 80
 {% endif %}
 
+volumes:
+  - name: certify-props
+    configMap:
+      name: certify-{{ issuer_id }}-props
+      items:
+        - key: certify-{{ issuer_id }}.properties
+          path: certify-{{ issuer_id }}.properties
+
+volumeMounts:
+  - name: certify-props
+    mountPath: /config
+    readOnly: true
+
+extraEnv:
+  - name: SPRING_CONFIG_LOCATION
+    value: /config/certify-{{ issuer_id }}.properties
+
 extraEnvVarsCM:
   - inji-{{ issuer_id }}-config
   - softhsm-certify-{{ issuer_id }}-share
