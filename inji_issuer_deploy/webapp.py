@@ -56,6 +56,7 @@ class IssuerConfigPayload(BaseModel):
     mimoto_issuers_s3_key: str = "mimoto-issuers-config.json"
     mimoto_service_namespace: str = "mimoto"
     mimoto_service_name: str = "mimoto"
+    mimoto_base_url: str = ""
     shared_config_source_namespace: str = "config-server"
     shared_configmaps: list[str] = Field(default_factory=list)
     helm_repo_name: str = "mosip"

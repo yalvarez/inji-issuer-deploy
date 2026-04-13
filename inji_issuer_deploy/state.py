@@ -60,6 +60,7 @@ class IssuerConfig:
     mimoto_issuers_s3_key: str = "mimoto-issuers-config.json"
     mimoto_service_namespace: str = "mimoto"
     mimoto_service_name: str = "mimoto"
+    mimoto_base_url: str = ""            # e.g. https://mimoto.example.org/v1/mimoto — overrides auto-derived URL
     shared_config_source_namespace: str = "config-server"
     shared_configmaps: list[str] = field(default_factory=lambda: [
         "artifactory-share", "config-server-share"

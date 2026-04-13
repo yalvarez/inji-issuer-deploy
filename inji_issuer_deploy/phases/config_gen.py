@@ -392,8 +392,11 @@ def run(state: DeployState, dry_run: bool = False) -> None:
     infra = state.phase("infra").outputs
     out_dir = _output_dir(cfg.issuer_id)
 
-    # Derive mimoto domain from S3 bucket name or use a default
-    mimoto_domain = f"mimoto.{'.'.join(cfg.base_domain.split('.')[-2:])}"
+    # Derive mimoto domain — use the explicit field if set, else auto-derive
+    if getattr(cfg, "mimoto_base_url", ""):
+        mimoto_domain = cfg.mimoto_base_url.rstrip("/").split("//")[-1].split("/")[0]
+    else:
+        mimoto_domain = f"mimoto.{'.'.join(cfg.base_domain.split('.')[-2:])}"
 
     raw_pc = getattr(state, "provider_cfg", None) or {}
     provider = raw_pc.get("provider", "onprem") if isinstance(raw_pc, dict) else getattr(raw_pc, "provider", "onprem")

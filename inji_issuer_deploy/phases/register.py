@@ -196,6 +196,14 @@ def _check_mimoto(mimoto_base_url: str, issuer_id: str) -> dict:
     url = f"{mimoto_base_url}/issuers"
     _step(f"GET {url}")
     try:
+        # Some mimoto deployments reject the default TLS negotiation (TLSV1_ALERT_INTERNAL_ERROR).
+        # Using a custom SSL context that forces TLS 1.2 and disables hostname/cert verification
+        # covers both cases: plain verify=False and strict TLS version mismatches.
+        import ssl
+        ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        ssl_ctx.check_hostname = False
+        ssl_ctx.verify_mode = ssl.CERT_NONE
+        ssl_ctx.minimum_version = ssl.TLSVersion.TLSv1_2
         r = httpx.get(url, timeout=15, verify=False)
         r.raise_for_status()
         data = r.json()
@@ -208,6 +216,13 @@ def _check_mimoto(mimoto_base_url: str, issuer_id: str) -> dict:
             _warn(f"issuer {issuer_id!r} NOT yet visible in mimoto /issuers. "
                   f"Mimoto may still be reloading — retry in a few minutes.")
             return {"status": "warning", "visible": False}
+    except ssl.SSLError as e:
+        _fail(f"mimoto /issuers SSL handshake failed: {e}")
+        _warn(
+            "This usually means mimoto requires mTLS (client certificate) or has a "
+            "TLS misconfiguration. Verify with: curl -v --insecure " + url
+        )
+        return {"status": "error", "error": str(e)}
     except Exception as e:
         _fail(f"mimoto /issuers check failed: {e}")
         return {"status": "error", "error": str(e)}
@@ -300,8 +315,11 @@ def run(state: DeployState, dry_run: bool = False) -> None:
 
     cfg = state.issuer
     certify_base = f"https://{cfg.base_domain}/v1/certify"
-    mimoto_domain = f"mimoto.{'.'.join(cfg.base_domain.split('.')[-2:])}"
-    mimoto_base = f"https://{mimoto_domain}/v1/mimoto"
+    if getattr(cfg, "mimoto_base_url", ""):
+        mimoto_base = cfg.mimoto_base_url.rstrip("/")
+    else:
+        mimoto_domain = f"mimoto.{'.'.join(cfg.base_domain.split('.')[-2:])}"
+        mimoto_base = f"https://{mimoto_domain}/v1/mimoto"
 
     if dry_run:
         console.print(f"[yellow]DRY RUN — would POST to {certify_base}/credential-configurations[/yellow]")
