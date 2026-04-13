@@ -262,7 +262,9 @@ volumeMounts:
 
 extraEnv:
   - name: SPRING_CONFIG_LOCATION
-    value: /config/certify-{{ issuer_id }}.properties
+    value: "file:///config/certify-{{ issuer_id }}.properties"
+  - name: MOSIP_CERTIFY_INTEGRATION_SCAN_BASE_PACKAGE
+    value: "io.mosip.certify.restapidataprovider.integration"
 
 extraEnvVarsCM:
   - inji-{{ issuer_id }}-config

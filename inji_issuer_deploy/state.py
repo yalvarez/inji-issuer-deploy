@@ -80,6 +80,7 @@ class IssuerConfig:
     chart_version: str = "0.12.2"
     softhsm_chart_version: str = "1.3.0-beta.2"
     node_selector: dict = field(default_factory=dict)
+    provision_db: bool = False          # True → create DB Secret and run postgres-init
 
 
 @dataclass

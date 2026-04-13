@@ -202,12 +202,10 @@ def run(state: DeployState) -> None:
     provider_cfg = _load_provider_cfg(state)
 
     # ── 0. DB provisioning option ───────────────────────────
-    # If running from web/CLI with provision_db in state, use it; else default False
-    provision_db = getattr(state, 'provision_db', None)
-    if provision_db is None:
-        provision_db = False
-    # Store in state for later phases
-    state.provision_db = provision_db
+    # provision_db lives on IssuerConfig so it serialises with the rest of the state.
+    # If not yet set (first run), default to False.
+    if not cfg.provision_db:
+        cfg.provision_db = False
 
     # ── 1. Identity ──────────────────────────────────────────
     console.print("\n[bold underline]1. Issuer identity[/bold underline]")
@@ -387,7 +385,7 @@ def run(state: DeployState) -> None:
     # ── 3. Shared infrastructure ─────────────────────────────
     console.print("\n[bold underline]3. Shared infrastructure[/bold underline]")
 
-    if getattr(state, 'provision_db', False):
+    if cfg.provision_db:
         # If provisioning DB in cluster, use internal service name and no admin secret
         cfg.rds_host = f"postgres-{cfg.issuer_id}"
         cfg.rds_admin_secret_arn = ""

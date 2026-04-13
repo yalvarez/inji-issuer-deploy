@@ -128,13 +128,25 @@ def _shared_configmaps(cfg) -> list[str]:
 # ── step 1: copy shared configmaps ───────────────────────────
 
 def _copy_configmap(src_ns: str, dest_ns: str, name: str) -> None:
-    """Copy a ConfigMap from one namespace to another."""
+    """Copy a ConfigMap from one namespace to another.
+
+    If the ConfigMap does not exist in the source namespace, a warning is
+    printed and the function returns without error — the shared resource may
+    simply not be present in this cluster and the deployment can continue.
+    """
     r = _kubectl("get", "configmap", name, "-n", dest_ns, check=False)
     if r.returncode == 0:
         _skip(f"configmap {name} in {dest_ns}")
         return
     _step(f"copy configmap {name}: {src_ns} → {dest_ns}")
-    get = _kubectl("get", "configmap", name, "-n", src_ns, "-o", "json")
+    get = _kubectl("get", "configmap", name, "-n", src_ns, "-o", "json", check=False)
+    if get.returncode != 0:
+        console.print(
+            f"  [yellow]⚠[/yellow]  ConfigMap [bold]{name}[/bold] not found in "
+            f"[bold]{src_ns}[/bold] — skipping copy. "
+            "Create it manually if Certify requires it."
+        )
+        return
     data = json.loads(get.stdout)
     # Strip source-namespace metadata
     data["metadata"] = {
@@ -193,8 +205,6 @@ def _init_db(cfg, ns: str, db_init_values: Path, provider, db_secret_ref: str | 
     if _helm_release_exists(ns, release):
         _skip(f"Helm release {release}")
         return
-        if getattr(state, 'provision_db', False):
-            _step(f"installing DB init Helm release {release}")
     secret_ref = db_secret_ref or f"inji/{cfg.issuer_id}/db-credentials"
     try:
         secret = provider.read_secret(secret_ref)
@@ -465,16 +475,21 @@ def run(state: DeployState, dry_run: bool = False) -> None:
         console.print("\n  [bold]2. Issuer ConfigMap[/bold]")
         _apply_configmap(configmap_f, ns)
 
-        # 3. DB init
+        # 3. DB init (only when provision_db is requested)
         console.print("\n  [bold]3. Database initialization[/bold]")
-        _init_db(
-            cfg,
-            ns,
-            db_init_vals,
-            provider,
-            infra_outputs.get("db_secret_ref") or infra_outputs.get("db_secret_arn"),
-        )
-        outputs["db_initialized"] = True
+        provision_db = getattr(cfg, "provision_db", False)
+        if provision_db:
+            _init_db(
+                cfg,
+                ns,
+                db_init_vals,
+                provider,
+                infra_outputs.get("db_secret_ref") or infra_outputs.get("db_secret_arn"),
+            )
+            outputs["db_initialized"] = True
+        else:
+            _skip("DB init (provision_db=false — using external PostgreSQL)")
+            outputs["db_initialized"] = False
 
         # 4. SoftHSM
         console.print("\n  [bold]4. SoftHSM[/bold]")
