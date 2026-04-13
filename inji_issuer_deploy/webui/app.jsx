@@ -220,7 +220,19 @@ async function apiGet(path, stateFile) {
   if (stateFile) {
     url.searchParams.set("state_file", stateFile);
   }
-  const response = await fetch(url);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 120000);
+  let response;
+  try {
+    response = await fetch(url, { signal: controller.signal });
+  } catch (error) {
+    if (error.name === "AbortError") {
+      throw new Error("Request timed out after 120s");
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
   if (!response.ok) {
     throw new Error(`Request failed: ${response.status}`);
   }
@@ -233,11 +245,26 @@ async function apiPost(path, body, stateFile) {
   if (stateFile) {
     url.searchParams.set("state_file", stateFile);
   }
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: body ? JSON.stringify(body) : null,
-  });
+  // Phase execution may take several minutes; keep a hard client timeout
+  // so the UI never stays pending forever with no feedback.
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 900000);
+  let response;
+  try {
+    response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: body ? JSON.stringify(body) : null,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (error.name === "AbortError") {
+      throw new Error("Request timed out after 15m");
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
   const payload = await response.json();
   return payload;
 }
@@ -367,6 +394,11 @@ function App() {
 
   const runPhase = async (phase, dryRun) => {
     setBusy(true);
+    const startedAt = Date.now();
+    const ticker = window.setInterval(() => {
+      const elapsed = Math.floor((Date.now() - startedAt) / 1000);
+      setLogs(`Running ${phase} step... ${elapsed}s elapsed. Please wait.`);
+    }, 5000);
     try {
       const payload = await apiPost(`/api/run/phase/${phaseApiName(phase)}`, { dry_run: dryRun }, stateFile);
       const logText = (payload.logs || "").trim();
@@ -383,6 +415,7 @@ function App() {
     } catch (error) {
       setLogs(`Phase ${phase} failed: ${error.message}`);
     } finally {
+      window.clearInterval(ticker);
       setBusy(false);
     }
   };
