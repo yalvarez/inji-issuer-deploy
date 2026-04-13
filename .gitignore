@@ -52,3 +52,4 @@ override.tf.json
 .idea/
 .DS_Store
 Thumbs.db
+inji-deploy-state.json
