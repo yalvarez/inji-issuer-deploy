@@ -209,7 +209,7 @@ def run(state: DeployState, dry_run: bool = False) -> None:
         # 3. Secrets store
         console.print(f"\n  [bold]3. Secrets ({provider.name()})[/bold]")
         db_ref = provider.ensure_secret(
-            name=f"inji/{cfg.issuer_id}/db-credentials",
+            name=f"inji/{cfg.issuer_id}/db-secret",
             description=f"Database credentials for inji_{cfg.issuer_id}",
             placeholder={"username": f"inji_{cfg.issuer_id}_user", "password": "CHANGE_ME"},
         )
