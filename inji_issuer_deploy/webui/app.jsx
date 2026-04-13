@@ -369,13 +369,15 @@ function App() {
     setBusy(true);
     try {
       const payload = await apiPost(`/api/run/phase/${phaseApiName(phase)}`, { dry_run: dryRun }, stateFile);
-      setLogs(payload.logs || payload.error || "No output returned.");
+      const logText = (payload.logs || "").trim();
+      const errorText = (!payload.ok && payload.error) ? `\n\n⚠ FAILED: ${payload.error}` : "";
+      setLogs((logText + errorText).trim() || "No output returned.");
       if (payload.state) {
         setSnapshot(payload.state);
       } else {
         await refreshState();
       }
-      if (!dryRun) {
+      if (payload.ok && !dryRun) {
         setCurrentStep((prev) => Math.min(prev + 1, PHASE_SEQUENCE.length - 1));
       }
     } catch (error) {

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import io
 import os
-from contextlib import contextmanager, redirect_stderr, redirect_stdout
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -10,6 +10,7 @@ from fastapi import FastAPI, Query
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+from rich.console import Console as _RichConsole
 
 from inji_issuer_deploy import state as st
 from inji_issuer_deploy.cloud import CloudProviderConfig, preflight_report
@@ -71,6 +72,45 @@ def _model_dump(model: BaseModel) -> dict[str, Any]:
     if hasattr(model, "model_dump"):
         return model.model_dump()
     return model.dict()
+
+
+@contextmanager
+def _redirect_console(buffer: io.StringIO):
+    """
+    Temporarily redirect all module-level Rich consoles to write to *buffer*
+    instead of the server's stdout/stderr.  This gives the Web UI access to
+    every console.print() line emitted by phase/provider modules.
+    """
+    import inji_issuer_deploy.phases.k8s_deploy as _k8s
+    import inji_issuer_deploy.phases.infra as _infra
+    import inji_issuer_deploy.phases.config_gen as _cfg
+    import inji_issuer_deploy.phases.register as _reg
+    import inji_issuer_deploy.cloud as _cloud
+    import inji_issuer_deploy.providers.onprem as _onprem
+    import inji_issuer_deploy.providers.aws as _aws
+    import inji_issuer_deploy.providers.azure as _azure
+    import inji_issuer_deploy.providers.gcp as _gcp
+
+    buf_console = _RichConsole(
+        file=buffer,
+        highlight=False,
+        markup=True,
+        force_terminal=False,
+        no_color=True,
+    )
+
+    _modules = [_k8s, _infra, _cfg, _reg, _cloud, _onprem, _aws, _azure, _gcp]
+    _originals = [(m, getattr(m, "console", None)) for m in _modules]
+
+    for m, _ in _originals:
+        if hasattr(m, "console"):
+            m.console = buf_console
+    try:
+        yield
+    finally:
+        for m, orig in _originals:
+            if orig is not None:
+                m.console = orig
 
 
 def create_app() -> FastAPI:
@@ -166,7 +206,7 @@ def create_app() -> FastAPI:
                     },
                 )
             try:
-                with redirect_stdout(buffer), redirect_stderr(buffer):
+                with _redirect_console(buffer):
                     run_phase(phase_name, state, dry_run=request.dry_run)
             except Exception as exc:
                 return JSONResponse(

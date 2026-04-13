@@ -44,11 +44,19 @@ def _run(cmd: list[str], check: bool = True,
 def _run_streamed(cmd: list[str], check: bool = True) -> int:
     """Run a command, streaming its output directly to the console in real time."""
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    collected: list[str] = []
     for line in proc.stdout:
-        console.print(f"    [dim]{line.rstrip()}[/dim]")
+        stripped = line.rstrip()
+        collected.append(stripped)
+        console.print(f"    [dim]{stripped}[/dim]")
     proc.wait()
     if check and proc.returncode != 0:
-        raise RuntimeError(f"Command failed (exit {proc.returncode}): {' '.join(cmd)}")
+        # Include the last 40 lines of output so the caller can see what failed
+        tail = "\n".join(collected[-40:]) if collected else "<no output>"
+        raise RuntimeError(
+            f"Command failed (exit {proc.returncode}): {' '.join(cmd)}\n\n"
+            f"Output:\n{tail}"
+        )
     return proc.returncode
 
 
