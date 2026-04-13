@@ -280,9 +280,108 @@ details summary {
   margin-bottom: 10px;
 }
 
+/* ─── Language switcher ──────────────────────────────────────────────────── */
+
+.hero {
+  position: relative;
+}
+
+.lang-switcher {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  display: flex;
+  gap: 6px;
+}
+
+.lang-btn {
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.35) !important;
+  color: white;
+  border-radius: 8px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  line-height: 1.4;
+}
+
+.lang-btn-active {
+  background: white;
+  color: #103f72;
+}
+
+/* ─── Field + Tooltip ────────────────────────────────────────────────────── */
+
+.field-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.field-label-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tooltip-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.tooltip-trigger {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #dbe8f8;
+  color: #164e82;
+  border: none !important;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0;
+  line-height: 18px;
+  text-align: center;
+}
+
+.tooltip-box {
+  position: absolute;
+  left: 26px;
+  top: -4px;
+  z-index: 100;
+  background: #1c3250;
+  color: #e8f0fc;
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 400;
+  width: 260px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  white-space: normal;
+  pointer-events: none;
+}
+
+.tooltip-example {
+  display: block;
+  margin-top: 6px;
+  font-style: italic;
+  color: #9ab8e0;
+  font-size: 12px;
+}
+
+/* ─── Responsive ─────────────────────────────────────────────────────────── */
+
 @media (max-width: 900px) {
   .hero {
-    display: grid;
+    display: block;
+  }
+
+  .lang-switcher {
+    position: static;
+    margin-top: 14px;
   }
 
   .wizard-strip,
