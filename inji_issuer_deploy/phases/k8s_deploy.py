@@ -413,8 +413,23 @@ def run(state: DeployState, dry_run: bool = False) -> None:
     raw_pc = getattr(state, "provider_cfg", None) or {}
     provider_name = raw_pc.get("provider", "onprem") if isinstance(raw_pc, dict) else getattr(raw_pc, "provider", "onprem")
 
+    import secrets
     try:
         _ensure_namespace(ns)
+
+        # --- Ensure SoftHSM share ConfigMap exists ---
+        softhsm_cm = f"softhsm-certify-{cfg.issuer_id}-share"
+        r = _kubectl("get", "configmap", softhsm_cm, "-n", ns, check=False)
+        if r.returncode != 0:
+            # Try to copy from softhsm namespace, else create empty
+            softhsm_ns = getattr(cfg, "softhsm_namespace", "softhsm")
+            rsrc = _kubectl("get", "configmap", softhsm_cm, "-n", softhsm_ns, check=False)
+            if rsrc.returncode == 0:
+                _copy_configmap(softhsm_ns, ns, softhsm_cm)
+            else:
+                _step(f"creating empty ConfigMap {softhsm_cm} in {ns}")
+                _kubectl("create", "configmap", softhsm_cm, "-n", ns)
+                _ok(f"ConfigMap {softhsm_cm} created in {ns}")
 
         # 1. Copy shared ConfigMaps
         console.print("\n  [bold]1. Shared ConfigMaps[/bold]")
@@ -425,6 +440,26 @@ def run(state: DeployState, dry_run: bool = False) -> None:
                 _copy_configmap(shared_source_ns, ns, cm_name)
         else:
             _skip("shared ConfigMaps")
+
+        # --- Ensure DB Secret exists if provisioning DB ---
+        db_secret = f"inji-{cfg.issuer_id}-db-secret"
+        provision_db = getattr(cfg, "provision_db", False)
+        if provision_db:
+            r = _kubectl("get", "secret", db_secret, "-n", ns, check=False)
+            if r.returncode != 0:
+                db_user = f"dbuser_{cfg.issuer_id}"
+                db_pass = secrets.token_urlsafe(16)
+                _step(f"creating Secret {db_secret} in {ns}")
+                _kubectl(
+                    "create", "secret", "generic", db_secret,
+                    f"--from-literal=username={db_user}",
+                    f"--from-literal=password={db_pass}",
+                    "-n", ns
+                )
+                _ok(f"Secret {db_secret} created in {ns}")
+                # Guardar en el estado
+                state.db_credentials = {"username": db_user, "password": db_pass}
+                save_state(state)
 
         # 2. Apply issuer ConfigMap
         console.print("\n  [bold]2. Issuer ConfigMap[/bold]")
