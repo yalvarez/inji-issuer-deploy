@@ -247,6 +247,24 @@ def _install_softhsm(cfg, ns: str, softhsm_values: Path) -> None:
 
 # ── step 5: inji-certify ─────────────────────────────────────
 
+def _helm_adopt(ns: str, kind: str, name: str, release: str) -> None:
+    """
+    Patch an existing resource with the Helm ownership labels/annotations so
+    `helm install` can adopt it instead of failing with 'invalid ownership metadata'.
+    """
+    _kubectl(
+        "label", kind, name, "-n", ns,
+        "app.kubernetes.io/managed-by=Helm",
+        "--overwrite", check=False,
+    )
+    _kubectl(
+        "annotate", kind, name, "-n", ns,
+        f"meta.helm.sh/release-name={release}",
+        f"meta.helm.sh/release-namespace={ns}",
+        "--overwrite", check=False,
+    )
+
+
 def _install_certify(cfg, ns: str,
                      certify_properties: Path,
                      helm_values: Path,
@@ -257,6 +275,10 @@ def _install_certify(cfg, ns: str,
         _skip(f"inji-certify release {release}")
         return
     _step(f"installing inji-certify {release}")
+
+    # Adopt any pre-existing resources (e.g. SA created by Phase 1) into this release
+    sa_name = getattr(cfg, "certify_service_account", f"inji-{cfg.issuer_id}-sa")
+    _helm_adopt(ns, "serviceaccount", sa_name, release)
 
     # Store the properties file as a ConfigMap in the namespace
     r = _run([
