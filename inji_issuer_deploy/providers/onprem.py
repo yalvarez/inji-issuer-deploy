@@ -304,15 +304,27 @@ spec:
             capture_output=True, text=True, check=False,
         )
         if r.returncode != 0 or not r.stdout:
-            raise RuntimeError(f"ConfigMap {cm_name} not found in namespace {ns}")
+            ns_check = subprocess.run(
+                ["kubectl", "get", "namespace", ns],
+                capture_output=True, text=True, check=False,
+            )
+            if ns_check.returncode != 0:
+                raise RuntimeError(f"Namespace {ns} not found while reading ConfigMap {cm_name}")
+            console.print(
+                f"  [yellow]⚠[/yellow]  ConfigMap {cm_name} not found in namespace {ns}. "
+                "Initializing empty mimoto issuers list."
+            )
+            return {"issuers": []}
 
         cm = json.loads(r.stdout)
         data = cm.get("data", {})
         raw = data.get(key) or data.get(safe_key)
         if not raw:
-            raise RuntimeError(
-                f"Key {key!r} (or fallback {safe_key!r}) not found in ConfigMap {cm_name}"
+            console.print(
+                f"  [yellow]⚠[/yellow]  Key {key!r} not found in ConfigMap {cm_name}. "
+                "Initializing empty mimoto issuers list."
             )
+            return {"issuers": []}
         return json.loads(raw)
 
     def _write_configmap(self, key: str, data: dict) -> None:
@@ -333,6 +345,22 @@ spec:
                 data_key = key
             elif safe_key in cm_data:
                 data_key = safe_key
+        else:
+            manifest = {
+                "apiVersion": "v1",
+                "kind": "ConfigMap",
+                "metadata": {"name": cm_name, "namespace": ns},
+                "data": {safe_key: content},
+            }
+            create = subprocess.run(
+                ["kubectl", "apply", "-f", "-"],
+                input=json.dumps(manifest),
+                capture_output=True, text=True, check=False,
+            )
+            if create.returncode != 0:
+                raise RuntimeError(f"Failed to create ConfigMap {cm_name}: {create.stderr}")
+            console.print(f"  [green]✓[/green] ConfigMap {cm_name} in {ns} created")
+            return
 
         result = subprocess.run(
             ["kubectl", "patch", "configmap", cm_name, "-n", ns,
