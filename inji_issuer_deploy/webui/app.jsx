@@ -167,6 +167,31 @@ const PHASE_INFO = {
   register: { icon: "✅" },
 };
 
+// ─── Phase i18n ───────────────────────────────────────────────────────────────
+const PHASE_I18N = {
+  en: {
+    collect:  { short: "Collect issuer data",            title: "Phase 0 — Issuer configuration",       description: "Capture the issuer identity, provider choice, domain, shared config sources, and integration endpoints." },
+    infra:    { short: "Prepare infrastructure",         title: "Phase 1 — Infrastructure provisioning", description: "Validate access, prepare namespace/secrets/registry/TLS hooks, and confirm the target environment is ready." },
+    config:   { short: "Generate config files",          title: "Phase 2 — Configuration generation",    description: "Render the properties, Helm values, ConfigMaps, and issuer patch artifacts required for deployment." },
+    deploy:   { short: "Deploy services to Kubernetes",  title: "Phase 3 — Kubernetes deployment",       description: "Apply the generated configuration and run the Helm-based deployment into the target namespace." },
+    register: { short: "Register and verify issuer",     title: "Phase 4 — Credential registration",     description: "Register credential metadata and perform the final smoke tests for the issuer endpoints." },
+  },
+  es: {
+    collect:  { short: "Recopilar datos del emisor",     title: "Fase 0 — Configuración del emisor",     description: "Captura la identidad del emisor, la elección de proveedor, dominio, fuentes de configuración compartida y endpoints de integración." },
+    infra:    { short: "Preparar infraestructura",       title: "Fase 1 — Aprovisionamiento de infraestructura", description: "Valida el acceso, prepara el namespace/secretos/registro/TLS y confirma que el entorno está listo." },
+    config:   { short: "Generar archivos de config",     title: "Fase 2 — Generación de configuración",  description: "Renderiza las properties, valores Helm, ConfigMaps y artefactos de parche del emisor necesarios para el despliegue." },
+    deploy:   { short: "Desplegar servicios en K8s",     title: "Fase 3 — Despliegue en Kubernetes",     description: "Aplica la configuración generada y ejecuta el despliegue basado en Helm en el namespace destino." },
+    register: { short: "Registrar y verificar emisor",   title: "Fase 4 — Registro de credenciales",     description: "Registra los metadatos de credenciales y realiza las pruebas finales de los endpoints del emisor." },
+  },
+  fr: {
+    collect:  { short: "Collecter les données",          title: "Phase 0 — Configuration de l'émetteur", description: "Capture l'identité de l'émetteur, le choix du fournisseur, le domaine, les sources de config partagées et les endpoints d'intégration." },
+    infra:    { short: "Préparer l'infrastructure",      title: "Phase 1 — Provisionnement de l'infrastructure", description: "Valide l'accès, prépare le namespace/secrets/registre/TLS et confirme que l'environnement cible est prêt." },
+    config:   { short: "Générer les fichiers de config", title: "Phase 2 — Génération de la configuration", description: "Génère les properties, les valeurs Helm, les ConfigMaps et les artefacts de patch de l'émetteur." },
+    deploy:   { short: "Déployer sur Kubernetes",        title: "Phase 3 — Déploiement Kubernetes",      description: "Applique la configuration générée et exécute le déploiement Helm dans le namespace cible." },
+    register: { short: "Enregistrer et vérifier",        title: "Phase 4 — Enregistrement des credentials", description: "Enregistre les métadonnées de credentials et exécute les tests de fumée finaux sur les endpoints de l'émetteur." },
+  },
+};
+
 const PHASE_SEQUENCE = ["collect", "infra", "config", "deploy", "register"];
 
 const DEFAULT_FORM = {
