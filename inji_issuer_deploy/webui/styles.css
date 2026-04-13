@@ -37,6 +37,13 @@ code {
   margin: 0 0 8px;
 }
 
+.brand-logo {
+  display: block;
+  height: 34px;
+  width: auto;
+  margin: 0 0 10px;
+}
+
 .eyebrow {
   margin: 0 0 6px;
   font-size: 12px;
@@ -377,6 +384,10 @@ details summary {
 @media (max-width: 900px) {
   .hero {
     display: block;
+  }
+
+  .brand-logo {
+    height: 30px;
   }
 
   .lang-switcher {

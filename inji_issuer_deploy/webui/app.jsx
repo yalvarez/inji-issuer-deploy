@@ -439,6 +439,11 @@ function App() {
     <div className="page">
       <header className="hero">
         <div className="hero-title">
+          <img
+            className="brand-logo"
+            src="https://cdpi.dev/wp-content/themes/cdpi-wp-theme/public/img/logos/cdpi-logo-white.png"
+            alt="CDPI"
+          />
           <p className="eyebrow">FastAPI + React MVP</p>
           <h1>{t.appTitle}</h1>
           <p>{t.appSubtitle}</p>
