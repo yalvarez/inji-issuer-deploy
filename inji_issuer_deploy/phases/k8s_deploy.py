@@ -193,7 +193,8 @@ def _init_db(cfg, ns: str, db_init_values: Path, provider, db_secret_ref: str | 
     if _helm_release_exists(ns, release):
         _skip(f"Helm release {release}")
         return
-    _step(f"installing DB init Helm release {release}")
+        if getattr(state, 'provision_db', False):
+            _step(f"installing DB init Helm release {release}")
     secret_ref = db_secret_ref or f"inji/{cfg.issuer_id}/db-credentials"
     try:
         secret = provider.read_secret(secret_ref)

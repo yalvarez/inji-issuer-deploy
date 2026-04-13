@@ -201,6 +201,14 @@ def run(state: DeployState) -> None:
     cfg: IssuerConfig = state.issuer
     provider_cfg = _load_provider_cfg(state)
 
+    # ── 0. DB provisioning option ───────────────────────────
+    # If running from web/CLI with provision_db in state, use it; else default False
+    provision_db = getattr(state, 'provision_db', None)
+    if provision_db is None:
+        provision_db = False
+    # Store in state for later phases
+    state.provision_db = provision_db
+
     # ── 1. Identity ──────────────────────────────────────────
     console.print("\n[bold underline]1. Issuer identity[/bold underline]")
 
@@ -377,16 +385,21 @@ def run(state: DeployState) -> None:
     # ── 3. Shared infrastructure ─────────────────────────────
     console.print("\n[bold underline]3. Shared infrastructure[/bold underline]")
 
-    cfg.rds_host = _ask(
-        "PostgreSQL host",
-        default=cfg.rds_host or "",
-        hint="shared DB endpoint, e.g. inji-prod-postgres.xxxx.sa-east-1.rds.amazonaws.com",
-    )
-    cfg.rds_admin_secret_arn = _ask(
-        "Database admin secret reference",
-        default=cfg.rds_admin_secret_arn or "",
-        hint="Secrets Manager / Key Vault / Secret Manager / Vault reference for the DB superuser",
-    )
+    if getattr(state, 'provision_db', False):
+        # If provisioning DB in cluster, use internal service name and no admin secret
+        cfg.rds_host = f"postgres-{cfg.issuer_id}"
+        cfg.rds_admin_secret_arn = ""
+    else:
+        cfg.rds_host = _ask(
+            "PostgreSQL host",
+            default=cfg.rds_host or "",
+            hint="shared DB endpoint, e.g. inji-prod-postgres.xxxx.sa-east-1.rds.amazonaws.com",
+        )
+        cfg.rds_admin_secret_arn = _ask(
+            "Database admin secret reference",
+            default=cfg.rds_admin_secret_arn or "",
+            hint="Secrets Manager / Key Vault / Secret Manager / Vault reference for the DB superuser",
+        )
     cfg.mimoto_issuers_s3_bucket = _ask(
         "Mimoto config bucket / container",
         default=cfg.mimoto_issuers_s3_bucket or "",

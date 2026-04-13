@@ -493,11 +493,11 @@ function App() {
           {currentPhaseKey === "collect" && (
             <>
               <div className="form-grid compact">
-                <Field fieldKey="issuer_id" t={t}><input value={form.issuer_id || ""} onChange={(e) => updateField("issuer_id", e.target.value)} /></Field>
-                <Field fieldKey="issuer_name" t={t}><input value={form.issuer_name || ""} onChange={(e) => updateField("issuer_name", e.target.value)} /></Field>
-                <Field fieldKey="base_domain" t={t}><input value={form.base_domain || ""} onChange={(e) => updateField("base_domain", e.target.value)} /></Field>
+                <Field fieldKey="issuer_id" t={t}><input required value={form.issuer_id || ""} onChange={(e) => updateField("issuer_id", e.target.value)} /></Field>
+                <Field fieldKey="issuer_name" t={t}><input required value={form.issuer_name || ""} onChange={(e) => updateField("issuer_name", e.target.value)} /></Field>
+                <Field fieldKey="base_domain" t={t}><input required value={form.base_domain || ""} onChange={(e) => updateField("base_domain", e.target.value)} /></Field>
                 <Field fieldKey="provider" t={t}>
-                  <select value={form.provider || "onprem"} onChange={(e) => updateField("provider", e.target.value)}>
+                  <select required value={form.provider || "onprem"} onChange={(e) => updateField("provider", e.target.value)}>
                     <option value="onprem">onprem</option>
                     <option value="aws">aws</option>
                     <option value="azure">azure</option>
@@ -505,12 +505,22 @@ function App() {
                   </select>
                 </Field>
                 <Field fieldKey="provisioner" t={t}>
-                  <select value={form.provisioner || "python"} onChange={(e) => updateField("provisioner", e.target.value)}>
+                  <select required value={form.provisioner || "python"} onChange={(e) => updateField("provisioner", e.target.value)}>
                     <option value="python">python</option>
                     <option value="terraform">terraform</option>
                   </select>
                 </Field>
-                <Field fieldKey="shared_config_source_namespace" t={t}><input value={form.shared_config_source_namespace || ""} onChange={(e) => updateField("shared_config_source_namespace", e.target.value)} /></Field>
+                <Field fieldKey="shared_config_source_namespace" t={t}><input required value={form.shared_config_source_namespace || ""} onChange={(e) => updateField("shared_config_source_namespace", e.target.value)} /></Field>
+                <Field fieldKey="provision_db" t={t}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5em' }}>
+                    <input
+                      type="checkbox"
+                      checked={!!form.provision_db}
+                      onChange={e => updateField("provision_db", e.target.checked)}
+                    />
+                    {t.provision_db || "Provision PostgreSQL in cluster (as a pod/service)"}
+                  </label>
+                </Field>
               </div>
 
               <button type="button" className="link-button" onClick={() => setShowAdvanced((v) => !v)}>
@@ -519,17 +529,17 @@ function App() {
 
               {showAdvanced && (
                 <div className="form-grid compact advanced-grid">
-                  <Field fieldKey="data_api_base_url" t={t}><input value={form.data_api_base_url || ""} onChange={(e) => updateField("data_api_base_url", e.target.value)} /></Field>
-                  <Field fieldKey="idperu_jwks_uri" t={t}><input value={form.idperu_jwks_uri || ""} onChange={(e) => updateField("idperu_jwks_uri", e.target.value)} /></Field>
-                  <Field fieldKey="idperu_issuer_uri" t={t}><input value={form.idperu_issuer_uri || ""} onChange={(e) => updateField("idperu_issuer_uri", e.target.value)} /></Field>
+                  <Field fieldKey="data_api_base_url" t={t}><input required value={form.data_api_base_url || ""} onChange={(e) => updateField("data_api_base_url", e.target.value)} /></Field>
+                  <Field fieldKey="idperu_jwks_uri" t={t}><input required value={form.idperu_jwks_uri || ""} onChange={(e) => updateField("idperu_jwks_uri", e.target.value)} /></Field>
+                  <Field fieldKey="idperu_issuer_uri" t={t}><input required value={form.idperu_issuer_uri || ""} onChange={(e) => updateField("idperu_issuer_uri", e.target.value)} /></Field>
                   <Field fieldKey="onprem_registry_backend" t={t}>
-                    <select value={form.onprem_registry_backend || "plain"} onChange={(e) => updateField("onprem_registry_backend", e.target.value)}>
+                    <select required value={form.onprem_registry_backend || "plain"} onChange={(e) => updateField("onprem_registry_backend", e.target.value)}>
                       <option value="plain">plain</option>
                       <option value="harbor">harbor</option>
                     </select>
                   </Field>
                   <Field fieldKey="onprem_secrets_backend" t={t}>
-                    <select value={form.onprem_secrets_backend || "k8s"} onChange={(e) => updateField("onprem_secrets_backend", e.target.value)}>
+                    <select required value={form.onprem_secrets_backend || "k8s"} onChange={(e) => updateField("onprem_secrets_backend", e.target.value)}>
                       <option value="k8s">k8s</option>
                       <option value="vault">vault</option>
                     </select>
