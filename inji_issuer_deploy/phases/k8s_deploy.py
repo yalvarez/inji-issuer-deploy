@@ -41,6 +41,17 @@ def _run(cmd: list[str], check: bool = True,
     return r
 
 
+def _run_streamed(cmd: list[str], check: bool = True) -> int:
+    """Run a command, streaming its output directly to the console in real time."""
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    for line in proc.stdout:
+        console.print(f"    [dim]{line.rstrip()}[/dim]")
+    proc.wait()
+    if check and proc.returncode != 0:
+        raise RuntimeError(f"Command failed (exit {proc.returncode}): {' '.join(cmd)}")
+    return proc.returncode
+
+
 def _helm(*args: str) -> subprocess.CompletedProcess:
     return _run(["helm", *args])
 
@@ -63,8 +74,10 @@ def _skip(msg: str) -> None:
 
 def _wait_rollout(namespace: str, deployment: str, timeout: int = 300) -> None:
     _step(f"waiting for {deployment} rollout ({timeout}s timeout)")
-    _kubectl("rollout", "status", f"deployment/{deployment}",
-             "-n", namespace, f"--timeout={timeout}s")
+    _run_streamed([
+        "kubectl", "rollout", "status", f"deployment/{deployment}",
+        "-n", namespace, f"--timeout={timeout}s",
+    ])
     _ok(f"{deployment} is ready")
 
 
@@ -184,16 +197,16 @@ def _init_db(cfg, ns: str, db_init_values: Path, provider, db_secret_ref: str | 
             "Using placeholder — update it first."
         )
 
-    _helm(
-        "-n", ns,
+    _run_streamed([
+        "helm", "-n", ns,
         "install", release,
         chart_ref,
         "-f", str(db_init_values),
         "--version", chart_version,
-        f"--set", f"dbUserPasswords.dbuserPassword={db_password}",
+        "--set", f"dbUserPasswords.dbuserPassword={db_password}",
         "--wait", "--wait-for-jobs",
         "--timeout", "300s",
-    )
+    ])
     _ok(f"DB init complete for inji_{cfg.issuer_id}")
 
 
@@ -211,14 +224,14 @@ def _install_softhsm(cfg, ns: str, softhsm_values: Path) -> None:
     _kubectl("create", "namespace", softhsm_ns, check=False)
     _kubectl("label", "namespace", softhsm_ns,
              "istio-injection=enabled", "--overwrite", check=False)
-    _helm(
-        "-n", softhsm_ns,
+    _run_streamed([
+        "helm", "-n", softhsm_ns,
         "install", release,
         chart_ref,
         "-f", str(softhsm_values),
         "--version", cfg.softhsm_chart_version,
         "--wait",
-    )
+    ])
     # Share the SoftHSM secret with the certify namespace
     _copy_secret(softhsm_ns, ns, f"softhsm-certify-{cfg.issuer_id}")
     _ok(f"SoftHSM installed for {cfg.issuer_id}")
@@ -255,14 +268,14 @@ def _install_certify(cfg, ns: str,
     if r.returncode != 0 and "already exists" not in r.stderr:
         raise RuntimeError(f"Failed to create certify configmap: {r.stderr}")
 
-    _helm(
-        "-n", ns,
+    _run_streamed([
+        "helm", "-n", ns,
         "install", release,
         chart_ref,
         "-f", str(helm_values),
         "--version", cfg.chart_version,
-        f"--set", f"istio.hosts[0]={cfg.base_domain}",
-    )
+        "--set", f"istio.hosts[0]={cfg.base_domain}",
+    ])
     _wait_rollout(ns, f"inji-certify-{cfg.issuer_id}")
     _ok(f"inji-certify installed for {cfg.issuer_id}")
 
@@ -354,9 +367,12 @@ def run(state: DeployState, dry_run: bool = False) -> None:
     repo_url = getattr(cfg, "helm_repo_url", "https://mosip.github.io/mosip-helm")
     if repo_name and repo_url:
         _step(f"adding Helm repository {repo_name}")
-        _helm("repo", "add", repo_name, repo_url, check=False)
-        _helm("repo", "update")
-        _ok("Helm repos updated")
+        add_rc = _run_streamed(["helm", "repo", "add", repo_name, repo_url, "--force-update"], check=False)
+        if add_rc not in (0, 1):  # 1 = already exists with same URL, harmless
+            raise RuntimeError(f"helm repo add {repo_name} failed (exit {add_rc})")
+        _step(f"updating Helm repository {repo_name}")
+        _run_streamed(["helm", "repo", "update", repo_name])
+        _ok("Helm repo updated")
 
     state.mark_started("k8s_deploy")
     outputs: dict = {}
