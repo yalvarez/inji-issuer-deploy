@@ -64,6 +64,11 @@ class IssuerConfig:
     shared_configmaps: list[str] = field(default_factory=lambda: [
         "artifactory-share", "config-server-share"
     ])
+
+    def ensure_softhsm_share(self, issuer_id: str):
+        share_name = f"softhsm-certify-{issuer_id}-share"
+        if share_name not in self.shared_configmaps:
+            self.shared_configmaps.append(share_name)
     helm_repo_name: str = "mosip"
     helm_repo_url: str = "https://mosip.github.io/mosip-helm"
     certify_chart_ref: str = "mosip/inji-certify"

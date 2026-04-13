@@ -218,6 +218,8 @@ def run(state: DeployState) -> None:
         hint="short unique id, e.g. mtc  —  used in resource names",
         validator=_slug,
     )
+    # Always ensure the SoftHSM share configmap is included for this issuer
+    cfg.ensure_softhsm_share(cfg.issuer_id)
     cfg.issuer_name = _ask(
         "Issuer display name",
         default=cfg.issuer_name or "",
