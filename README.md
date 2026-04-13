@@ -94,6 +94,7 @@ inji-issuer-deploy phase config --dry-run
 inji-issuer-deploy run
 ```
 
+
 If you want to rehearse the cycle before the first real deployment, use the guides in:
 
 ```text
@@ -101,6 +102,18 @@ docs/examples/onprem-simulation.md
 docs/onprem-ubuntu-vps.md
 docs/onprem-first-real-runbook.md
 ```
+
+---
+
+## Errores conocidos y limitaciones actuales
+
+- **Certify no inicia por variable no resuelta**: En algunos despliegues, el pod de Certify falla con un error de Spring Boot por no poder resolver el placeholder `mosip.certify.integration.scan-base-package`. Se está investigando si es por el orden de carga de la configuración o por la falta de la variable como environment variable.
+- **Persistencia de `provision_db`**: En versiones previas, el flag `provision_db` no se persistía correctamente desde la web UI. Ya está corregido en el backend, pero si se detectan problemas, asegurarse de que el modelo backend incluya todos los campos de configuración.
+- **Secret de base de datos**: El Secret debe llamarse exactamente `inji-<issuer>-db-secret`. Si Certify no arranca, revisar que el Secret exista y tenga el nombre correcto.
+- **ConfigMap de SoftHSM**: El ConfigMap `softhsm-certify-<issuer>-share` debe existir en el namespace destino. El CLI ya automatiza su creación/copia, pero si falta, el pod de Certify no arrancará.
+- **Montaje de properties y SPRING_CONFIG_LOCATION**: El CLI automatiza el montaje del ConfigMap de properties y la variable de entorno `SPRING_CONFIG_LOCATION`, pero si Certify sigue sin cargar la configuración, revisar los logs y la generación de Helm values.
+- **Dependencia en recursos compartidos**: El flujo asume que existen ciertos ConfigMaps y recursos compartidos (`artifactory-share`, `config-server-share`, etc.) en namespaces predefinidos. Si no existen, la fase de deploy puede fallar.
+- **Soporte cloud**: El soporte para AWS/EKS y Terraform está en beta y no es el camino recomendado para la primera instalación real.
 
 ### General workflow
 
