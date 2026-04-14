@@ -23,7 +23,7 @@ from inji_issuer_deploy.state import DeployState, save_state
 
 console = Console()
 
-HEALTH_TIMEOUT_SECS = 300
+HEALTH_TIMEOUT_SECS = 600
 HEALTH_POLL_INTERVAL = 10
 
 
@@ -47,7 +47,52 @@ def _warn(msg: str) -> None:
 
 # ── health check ──────────────────────────────────────────────
 
-def _wait_healthy(base_url: str) -> None:
+def _kubectl_wait_ready(namespace: str, issuer_id: str, timeout: int) -> bool:
+    """
+    Wait for the Certify pod to be Ready using kubectl wait.
+    Works without external DNS/ingress — checks readiness probe internally.
+    Returns True when ready, False on timeout or error.
+    """
+    import subprocess
+    label = f"app.kubernetes.io/instance=inji-certify-{issuer_id}"
+    _step(f"waiting for Certify pod ready (kubectl wait, {timeout}s)")
+    result = subprocess.run(
+        [
+            "kubectl", "wait", "--for=condition=ready", "pod",
+            "-l", label, "-n", namespace,
+            f"--timeout={timeout}s",
+        ],
+        capture_output=True, text=True,
+    )
+    if result.returncode == 0:
+        _ok("Certify pod is Ready (readiness probe passed)")
+        return True
+    # Print pod state for diagnostics
+    import subprocess as sp
+    sp.run(["kubectl", "get", "pods", "-n", namespace, "-l", label], check=False)
+    return False
+
+
+def _wait_healthy(base_url: str, namespace: str = "", issuer_id: str = "") -> None:
+    """
+    Wait for Certify to report status=UP.
+
+    Strategy (in order):
+    1. If namespace + issuer_id are provided, try `kubectl wait --for=condition=ready`
+       which checks the readiness probe internally — no external DNS or ingress needed.
+    2. Fall back to polling the external /actuator/health endpoint over HTTPS.
+    """
+    # 1. Internal check via kubectl (works even if external DNS is not yet configured)
+    if namespace and issuer_id:
+        ready = _kubectl_wait_ready(namespace, issuer_id, timeout=HEALTH_TIMEOUT_SECS)
+        if ready:
+            return
+        _warn(
+            "kubectl wait timed out — the pod readiness probe is still failing. "
+            "Attempting external HTTPS health check as a fallback."
+        )
+
+    # 2. External HTTPS check
     health_url = f"{base_url}/actuator/health"
     _step(f"waiting for Certify health check at {health_url}")
     deadline = time.time() + HEALTH_TIMEOUT_SECS
@@ -333,8 +378,9 @@ def run(state: DeployState, dry_run: bool = False) -> None:
     try:
         # 1. Wait for health
         console.print("\n  [bold]1. Health check[/bold]")
+        ns = f"inji-{cfg.issuer_id}"
         try:
-            _wait_healthy(certify_base)
+            _wait_healthy(certify_base, namespace=ns, issuer_id=cfg.issuer_id)
         except TimeoutError as e:
             _warn(str(e))
             _warn("Proceeding with registration attempt anyway.")

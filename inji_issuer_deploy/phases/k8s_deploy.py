@@ -80,12 +80,32 @@ def _skip(msg: str) -> None:
     console.print(f"  [dim]↷ {msg} — already installed, skipping[/dim]")
 
 
-def _wait_rollout(namespace: str, deployment: str, timeout: int = 300) -> None:
-    _step(f"waiting for {deployment} rollout ({timeout}s timeout)")
+def _dump_pod_logs(namespace: str, deployment: str) -> None:
+    """Print recent pod logs from a deployment for diagnostics (best-effort)."""
+    console.print(f"\n  [yellow]Diagnostic — pod status and recent logs for {deployment}:[/yellow]")
+    _run_streamed(["kubectl", "get", "pods", "-n", namespace,
+                   "-l", f"app.kubernetes.io/instance={deployment}"], check=False)
+    # Previous container (crash logs, most useful when CrashLoopBackOff)
     _run_streamed([
-        "kubectl", "rollout", "status", f"deployment/{deployment}",
-        "-n", namespace, f"--timeout={timeout}s",
-    ])
+        "kubectl", "logs", f"deploy/{deployment}", "-n", namespace,
+        "--tail=80", "--previous",
+    ], check=False)
+    # Current container
+    _run_streamed([
+        "kubectl", "logs", f"deploy/{deployment}", "-n", namespace, "--tail=80",
+    ], check=False)
+
+
+def _wait_rollout(namespace: str, deployment: str, timeout: int = 600) -> None:
+    _step(f"waiting for {deployment} rollout ({timeout}s timeout)")
+    try:
+        _run_streamed([
+            "kubectl", "rollout", "status", f"deployment/{deployment}",
+            "-n", namespace, f"--timeout={timeout}s",
+        ])
+    except RuntimeError:
+        _dump_pod_logs(namespace, deployment)
+        raise
     _ok(f"{deployment} is ready")
 
 
