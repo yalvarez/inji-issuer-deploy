@@ -247,7 +247,7 @@ istio:
       port: 80
 {% endif %}
 
-volumes:
+extraVolumes:
   - name: certify-props
     configMap:
       name: certify-{{ issuer_id }}-props
@@ -255,7 +255,7 @@ volumes:
         - key: certify-{{ issuer_id }}.properties
           path: certify-{{ issuer_id }}.properties
 
-volumeMounts:
+extraVolumeMounts:
   - name: certify-props
     mountPath: /config
     readOnly: true
@@ -265,6 +265,10 @@ extraEnvVarsCM:
   - softhsm-certify-{{ issuer_id }}-share
 
 extraEnvVars: |
+  - name: SPRING_CONFIG_LOCATION
+    value: "file:///config/certify-{{ issuer_id }}.properties"
+  - name: MOSIP_CERTIFY_INTEGRATION_SCAN_BASE_PACKAGE
+    value: "io.mosip.certify.restapidataprovider.integration"
   - name: DB_USERNAME
     valueFrom:
       secretKeyRef:
@@ -323,11 +327,6 @@ data:
   db_name: "{{ db_name }}"
   idperu_issuer_uri: "{{ idperu_issuer_uri }}"
   idperu_jwks_uri: "{{ idperu_jwks_uri }}"
-  # Spring resolves ${mosip.certify.integration.scan-base-package} during @ComponentScan,
-  # before SPRING_CONFIG_LOCATION files are loaded. Setting it here via the ConfigMap
-  # (mounted as envFrom) guarantees it is in the pod environment at startup time.
-  MOSIP_CERTIFY_INTEGRATION_SCAN_BASE_PACKAGE: "io.mosip.certify.restapidataprovider.integration"
-  SPRING_CONFIG_LOCATION: "file:///config/certify-{{ issuer_id }}.properties"
 """
 
 MIMOTO_ISSUER_ENTRY = """\
