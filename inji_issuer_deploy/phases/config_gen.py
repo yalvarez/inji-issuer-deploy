@@ -212,7 +212,10 @@ resources:
     memory: 1500Mi
 
 additionalResources:
-  javaOpts: "-Xms1500M -Xmx1500M"
+  javaOpts: >-
+    -Xms1500M -Xmx1500M
+    -Dmosip.certify.integration.scan-base-package=io.mosip.certify.restapidataprovider.integration
+    -Dspring.config.additional-location=optional:file:///config/certify-{{ issuer_id }}.properties
 
 {% if provider == 'onprem' %}
 istio:
@@ -264,11 +267,7 @@ extraEnvVarsCM:
   - inji-{{ issuer_id }}-config
   - softhsm-certify-{{ issuer_id }}-share
 
-extraEnvVars: |
-  - name: SPRING_CONFIG_LOCATION
-    value: "file:///config/certify-{{ issuer_id }}.properties"
-  - name: MOSIP_CERTIFY_INTEGRATION_SCAN_BASE_PACKAGE
-    value: "io.mosip.certify.restapidataprovider.integration"
+extraEnvVars:
   - name: DB_USERNAME
     valueFrom:
       secretKeyRef:
