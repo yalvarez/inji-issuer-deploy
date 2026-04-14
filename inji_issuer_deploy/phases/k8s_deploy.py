@@ -20,6 +20,7 @@ import time
 from pathlib import Path
 
 from rich.console import Console
+from rich.markup import escape as _markup_escape
 from rich.panel import Panel
 
 from inji_issuer_deploy.cloud import CloudProviderConfig, get_provider
@@ -48,7 +49,7 @@ def _run_streamed(cmd: list[str], check: bool = True) -> int:
     for line in proc.stdout:
         stripped = line.rstrip()
         collected.append(stripped)
-        console.print(f"    [dim]{stripped}[/dim]")
+        console.print(f"    [dim]{_markup_escape(stripped)}[/dim]")
     proc.wait()
     if check and proc.returncode != 0:
         # Include the last 40 lines of output so the caller can see what failed
@@ -81,19 +82,34 @@ def _skip(msg: str) -> None:
 
 
 def _dump_pod_logs(namespace: str, deployment: str) -> None:
-    """Print recent pod logs from a deployment for diagnostics (best-effort)."""
+    """Print recent pod logs from the NEWEST pod of a deployment (best-effort)."""
     console.print(f"\n  [yellow]Diagnostic — pod status and recent logs for {deployment}:[/yellow]")
     _run_streamed(["kubectl", "get", "pods", "-n", namespace,
                    "-l", f"app.kubernetes.io/instance={deployment}"], check=False)
-    # Previous container (crash logs, most useful when CrashLoopBackOff)
-    _run_streamed([
-        "kubectl", "logs", f"deploy/{deployment}", "-n", namespace,
-        "--tail=80", "--previous",
+
+    # Identify the newest pod by creation timestamp
+    r = _run([
+        "kubectl", "get", "pods", "-n", namespace,
+        "-l", f"app.kubernetes.io/instance={deployment}",
+        "--sort-by=.metadata.creationTimestamp",
+        "-o", "jsonpath={.items[-1].metadata.name}",
     ], check=False)
-    # Current container
-    _run_streamed([
-        "kubectl", "logs", f"deploy/{deployment}", "-n", namespace, "--tail=80",
-    ], check=False)
+    newest_pod = r.stdout.strip() if r.returncode == 0 else ""
+
+    if newest_pod:
+        console.print(f"\n  [dim]--- Logs from newest pod: {newest_pod} ---[/dim]")
+        # Previous container crash logs (most useful in CrashLoopBackOff)
+        _run_streamed([
+            "kubectl", "logs", newest_pod, "-n", namespace, "--tail=80", "--previous",
+        ], check=False)
+        # Current (or last) container logs
+        _run_streamed([
+            "kubectl", "logs", newest_pod, "-n", namespace, "--tail=80",
+        ], check=False)
+    else:
+        _run_streamed([
+            "kubectl", "logs", f"deploy/{deployment}", "-n", namespace, "--tail=80",
+        ], check=False)
 
 
 def _wait_rollout(namespace: str, deployment: str, timeout: int = 600) -> None:
