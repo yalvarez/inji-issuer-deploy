@@ -280,26 +280,32 @@ def _install_certify(cfg, ns: str,
                      certify_properties: Path,
                      helm_values: Path,
                      provider: str = "onprem") -> None:
+    """Install or upgrade the inji-certify Helm release.
+
+    Uses `helm upgrade --install` so that:
+    - First run: installs the release.
+    - Subsequent runs: upgrades with the current values, ensuring any
+      configuration changes (new env vars, updated properties, etc.)
+      are always applied without requiring a manual helm upgrade.
+    """
     release = f"inji-certify-{cfg.issuer_id}"
     chart_ref = getattr(cfg, "certify_chart_ref", "mosip/inji-certify")
-    if _helm_release_exists(ns, release):
-        _skip(f"inji-certify release {release}")
-        return
-    _step(f"installing inji-certify {release}")
+    upgrading = _helm_release_exists(ns, release)
+    _step(f"{'upgrading' if upgrading else 'installing'} inji-certify {release}")
 
     # Adopt any pre-existing resources (e.g. SA created by Phase 1) into this release
     sa_name = getattr(cfg, "certify_service_account", f"inji-{cfg.issuer_id}-sa")
     _helm_adopt(ns, "serviceaccount", sa_name, release)
 
-    # Store the properties file as a ConfigMap in the namespace
-    r = _run([
-        "kubectl", "create", "configmap",
-        f"certify-{cfg.issuer_id}-props",
+    # Apply the properties ConfigMap — use replace (delete+create) so changes
+    # in the .properties file are always reflected even on re-runs.
+    cm_name = f"certify-{cfg.issuer_id}-props"
+    _run(["kubectl", "delete", "configmap", cm_name, "-n", ns], check=False)
+    _run([
+        "kubectl", "create", "configmap", cm_name,
         "-n", ns,
         f"--from-file=certify-{cfg.issuer_id}.properties={certify_properties}",
-    ], check=False)
-    if r.returncode != 0 and "already exists" not in (r.stderr or ""):
-        raise RuntimeError(f"Failed to create certify configmap: {r.stderr}")
+    ])
 
     # Safety-net --set overrides so even a stale values file works correctly
     extra_sets: list[str] = []
@@ -313,14 +319,14 @@ def _install_certify(cfg, ns: str,
 
     _run_streamed([
         "helm", "-n", ns,
-        "install", release,
+        "upgrade", "--install", release,
         chart_ref,
         "-f", str(helm_values),
         "--version", cfg.chart_version,
         *extra_sets,
     ])
     _wait_rollout(ns, f"inji-certify-{cfg.issuer_id}")
-    _ok(f"inji-certify installed for {cfg.issuer_id}")
+    _ok(f"inji-certify {'upgraded' if upgrading else 'installed'} for {cfg.issuer_id}")
 
 
 # ── step 6: mimoto patch ─────────────────────────────────────
