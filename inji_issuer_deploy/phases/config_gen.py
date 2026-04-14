@@ -215,7 +215,6 @@ additionalResources:
   javaOpts: >-
     -Xms1500M -Xmx1500M
     -Dmosip.certify.integration.scan-base-package=io.mosip.certify.restapidataprovider.integration
-    -Dspring.config.additional-location=optional:file:///config/certify-{{ issuer_id }}.properties
 
 {% if provider == 'onprem' %}
 istio:
@@ -320,6 +319,7 @@ metadata:
     managed-by: inji-issuer-deploy
 data:
   active_profile_env: "default,{{ issuer_id }}"
+  SPRING_CONFIG_ADDITIONAL_LOCATION: "optional:file:///config/certify-{{ issuer_id }}.properties"
   mosip_certify_domain_url: "https://{{ base_domain }}"
   rds_host: "{{ rds_host }}"
   rds_port: "{{ rds_port }}"
