@@ -23,7 +23,7 @@ from inji_issuer_deploy.state import DeployState, save_state
 
 console = Console()
 
-HEALTH_TIMEOUT_SECS = 600
+HEALTH_TIMEOUT_SECS = 1200
 HEALTH_POLL_INTERVAL = 10
 
 

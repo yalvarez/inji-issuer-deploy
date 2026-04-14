@@ -112,7 +112,7 @@ def _dump_pod_logs(namespace: str, deployment: str) -> None:
         ], check=False)
 
 
-def _wait_rollout(namespace: str, deployment: str, timeout: int = 600) -> None:
+def _wait_rollout(namespace: str, deployment: str, timeout: int = 1200) -> None:
     _step(f"waiting for {deployment} rollout ({timeout}s timeout)")
     try:
         _run_streamed([
