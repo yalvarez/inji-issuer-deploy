@@ -219,6 +219,7 @@ additionalResources:
     -Dmosip.certify.authn.jwk-set-uri={{ idperu_jwks_uri }}
     -Dspring.data.redis.host={{ redis_host }}
     -Dspring.data.redis.port={{ redis_port }}
+    -Dspring.config.import=optional:file:///config/certify-{{ issuer_id }}.properties
 
 {% if provider == 'onprem' %}
 istio:
