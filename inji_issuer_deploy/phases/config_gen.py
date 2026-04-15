@@ -219,7 +219,18 @@ additionalResources:
     -Dmosip.certify.authn.jwk-set-uri={{ idperu_jwks_uri }}
     -Dspring.data.redis.host={{ redis_host }}
     -Dspring.data.redis.port={{ redis_port }}
-    -Dspring.config.import=file:///config/certify-{{ issuer_id }}.properties
+    -Dspring.config.import=optional:file:///config/certify-{{ issuer_id }}.properties
+  volumes:
+    - name: certify-props
+      configMap:
+        name: certify-{{ issuer_id }}-props
+        items:
+          - key: certify-{{ issuer_id }}.properties
+            path: certify-{{ issuer_id }}.properties
+  volumeMounts:
+    - name: certify-props
+      mountPath: /config
+      readOnly: true
 
 {% if provider == 'onprem' %}
 istio:
@@ -253,19 +264,6 @@ istio:
       uri: /
       port: 80
 {% endif %}
-
-extraVolumes:
-  - name: certify-props
-    configMap:
-      name: certify-{{ issuer_id }}-props
-      items:
-        - key: certify-{{ issuer_id }}.properties
-          path: certify-{{ issuer_id }}.properties
-
-extraVolumeMounts:
-  - name: certify-props
-    mountPath: /config
-    readOnly: true
 
 extraEnvVarsCM:
   - inji-{{ issuer_id }}-config
