@@ -217,6 +217,9 @@ additionalResources:
     -Dmosip.certify.integration.scan-base-package=io.mosip.certify.restapidataprovider.integration
     -Dmosip.certify.authn.issuer-uri={{ idperu_issuer_uri }}
     -Dmosip.certify.authn.jwk-set-uri={{ idperu_jwks_uri }}
+    -Dspring.data.redis.host={{ redis_host }}
+    -Dspring.data.redis.port={{ redis_port }}
+    -Dmosip.certify.authn.allowed-audiences=https://{{ base_domain }}/v1/certify/issuance/credential
 
 {% if provider == 'onprem' %}
 istio:
