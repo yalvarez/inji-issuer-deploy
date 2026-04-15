@@ -562,7 +562,7 @@ def run(state: DeployState, dry_run: bool = False) -> None:
         _ok("Helm repo updated")
 
     # Verify the Kubernetes API server is reachable before doing any work
-    r_ping = _run(["kubectl", "cluster-info"], check=False)
+    r_ping = _run(["kubectl", "get", "nodes", "--request-timeout=10s"], check=False)
     if r_ping.returncode != 0:
         raise RuntimeError(
             "Kubernetes API server is not reachable.\n"
