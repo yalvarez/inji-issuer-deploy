@@ -1,7 +1,7 @@
 # CLAUDE.md — inji-issuer-deploy
 
 Contexto completo para continuar el desarrollo de esta herramienta desde VS Code.
-Última actualización: 13 de abril de 2026 — sesión CDPI primera instalación on-prem real.
+Última actualización: 24 de mayo de 2024 — Soporte para aprovisionamiento de Redis y paridad Web UI.
 
 ---
 
@@ -100,12 +100,12 @@ tests/
 
 ### Fase 0 — collect (`phases/collect.py`)
 CLI interactiva. Pregunta los datos mínimos y al final selecciona y verifica el
-cloud provider. Escribe todo en `inji-deploy-state.json`.
+cloud provider. Gestiona la lógica de autogeneración de hosts para DB y Redis.
 
 Datos que recoge: `issuer_id` (slug), `issuer_name`, `base_domain`, `eks_cluster_name`,
 `rds_host`, `idperu_jwks_uri`, `idperu_issuer_uri`, `document_number_claim`,
 `data_api_base_url`, `data_api_auth_type`, `scope_mappings[]`, `provision_db`,
-`shared_configmaps`, `shared_config_source_namespace`, provider y su config.
+`provision_redis`, `shared_configmaps`, `shared_config_source_namespace`, provider y su config.
 
 La web UI omite esta fase interactiva y la reemplaza con un POST a `/api/issuer-config`.
 
@@ -269,6 +269,9 @@ class IssuerConfig:
 
     # Comportamiento de deploy
     provision_db: bool          # True → crear Secret DB y ejecutar postgres-init
+    provision_redis: bool       # True → instalar Redis via Helm en el cluster
+    redis_chart_ref: str        # default "bitnami/redis"
+    redis_chart_version: str    # default "18.1.6"
 
 @dataclass
 class DeployState:

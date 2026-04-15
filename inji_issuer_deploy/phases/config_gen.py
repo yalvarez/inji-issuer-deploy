@@ -215,6 +215,8 @@ additionalResources:
   javaOpts: >-
     -Xms1500M -Xmx1500M
     -Dmosip.certify.integration.scan-base-package=io.mosip.certify.restapidataprovider.integration
+    -Dmosip.certify.authn.issuer-uri={{ idperu_issuer_uri }}
+    -Dmosip.certify.authn.jwk-set-uri={{ idperu_jwks_uri }}
 
 {% if provider == 'onprem' %}
 istio:
