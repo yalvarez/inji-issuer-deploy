@@ -78,6 +78,45 @@ class IssuerConfigPayload(BaseModel):
     onprem_cert_issuer_name: str = "letsencrypt-prod"
     onprem_cert_issuer_kind: str = "ClusterIssuer"
 
+    # --- Campos adicionales para paridad CLI ---
+    # AWS
+    aws_profile: str = ""
+    aws_route53_zone_name: str = ""
+    aws_existing_acm_certificate_arn: str = ""
+    aws_manage_acm: bool = False
+    aws_create_dns_record: bool = False
+    aws_dns_record_name: str = ""
+    aws_dns_target_name: str = ""
+    aws_dns_target_zone_id: str = ""
+
+    # Azure
+    azure_subscription_id: str = ""
+    azure_resource_group: str = ""
+    azure_client_id: str = ""
+    azure_tenant_id: str = ""
+    azure_keyvault_name: str = ""
+
+    # GCP
+    gcp_project_id: str = ""
+    gcp_region: str = ""
+    gcp_service_account_email: str = ""
+
+    # On-prem
+    onprem_minio_endpoint: str = ""
+    onprem_minio_access_key: str = ""
+    onprem_minio_secret_key: str = ""
+    onprem_vault_addr: str = ""
+    onprem_vault_token: str = ""
+
+    # Redis
+    redis_host: str = "redis"
+    redis_port: int = 6379
+    redis_password: str = ""
+
+    # Otros campos avanzados
+    filiation_required: bool = False
+    # Puedes agregar más según se detecten en collect.py y CloudProviderConfig
+
 
 @contextmanager
 def use_state_file(state_file: str | None):
