@@ -161,6 +161,8 @@ spring.jpa.show-sql=false
 spring.cache.type=redis
 spring.data.redis.host=${REDIS_HOST:redis}
 spring.data.redis.port=${REDIS_PORT:6379}
+spring.data.redis.host={{ redis_host }}
+spring.data.redis.port={{ redis_port }}
 spring.data.redis.password=${REDIS_PASSWORD:}
 mosip.certify.cache.names=userinfo,vcissuance,templatecache,certificatedatacache
 mosip.certify.cache.security.secretkey.reference-id=TRANSACTION_CACHE
@@ -323,6 +325,8 @@ data:
   mosip_certify_domain_url: "https://{{ base_domain }}"
   rds_host: "{{ rds_host }}"
   rds_port: "{{ rds_port }}"
+  redis_host: "{{ redis_host }}"
+  redis_port: "{{ redis_port }}"
   db_name: "{{ db_name }}"
   idperu_issuer_uri: "{{ idperu_issuer_uri }}"
   idperu_jwks_uri: "{{ idperu_jwks_uri }}"
@@ -551,6 +555,8 @@ def run(state: DeployState, dry_run: bool = False) -> None:
         "base_domain":           cfg.base_domain,
         "rds_host":              cfg.rds_host,
         "rds_port":              cfg.rds_port,
+        "redis_host":            cfg.redis_host,
+        "redis_port":            cfg.redis_port,
         "db_name":               infra.get("db_name", f"inji_{cfg.issuer_id}"),
         "idperu_jwks_uri":       cfg.idperu_jwks_uri,
         "idperu_issuer_uri":     cfg.idperu_issuer_uri,
