@@ -159,8 +159,6 @@ spring.jpa.show-sql=false
 
 ## ── Cache ────────────────────────────────────────────────────
 spring.cache.type=redis
-spring.data.redis.host=${REDIS_HOST:redis}
-spring.data.redis.port=${REDIS_PORT:6379}
 spring.data.redis.host={{ redis_host }}
 spring.data.redis.port={{ redis_port }}
 spring.data.redis.password=${REDIS_PASSWORD:}
