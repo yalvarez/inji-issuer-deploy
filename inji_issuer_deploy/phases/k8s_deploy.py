@@ -582,8 +582,13 @@ def run(state: DeployState, dry_run: bool = False) -> None:
                 _copy_configmap(softhsm_ns, ns, softhsm_cm)
             else:
                 _step(f"creating empty ConfigMap {softhsm_cm} in {ns}")
-                _kubectl("create", "configmap", softhsm_cm, "-n", ns)
-                _ok(f"ConfigMap {softhsm_cm} created in {ns}")
+                rc = _kubectl("create", "configmap", softhsm_cm, "-n", ns, check=False)
+                if rc.returncode != 0 and "already exists" not in rc.stderr:
+                    raise RuntimeError(
+                        f"Command failed: kubectl create configmap {softhsm_cm}\n"
+                        f"stdout: {rc.stdout}\nstderr: {rc.stderr}"
+                    )
+                _ok(f"ConfigMap {softhsm_cm} ready in {ns}")
 
         # 1. Copy shared ConfigMaps
         console.print("\n  [bold]1. Shared ConfigMaps[/bold]")
