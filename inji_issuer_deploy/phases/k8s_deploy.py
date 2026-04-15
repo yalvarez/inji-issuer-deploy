@@ -232,6 +232,68 @@ def _apply_configmap(cfg_file: Path, ns: str) -> None:
     _ok("ConfigMap applied")
 
 
+# ── step 2b/2c: on-prem infrastructure dependencies ──────────
+
+def _is_incluster_host(host: str) -> bool:
+    """True when host looks like a Kubernetes service name (no dots, not an IP)."""
+    return bool(host) and "." not in host and any(c.isalpha() for c in host)
+
+
+def _ensure_postgresql(cfg, ns: str, pg_manifest: Path) -> None:
+    """Deploy an in-cluster PostgreSQL Deployment + Service for on-prem.
+
+    Creates the 'postgres-postgresql' Secret (required by both the PostgreSQL
+    container and the postgres-init Helm chart) before applying the manifest.
+    Idempotent: skips if the Deployment already exists.
+    """
+    deploy_name = f"postgresql-{cfg.issuer_id}"
+    r = _kubectl("get", "deployment", deploy_name, "-n", ns, check=False)
+    if r.returncode == 0:
+        _skip(f"postgresql deployment {deploy_name}")
+        return
+
+    _step(f"deploying in-cluster PostgreSQL ({deploy_name})")
+
+    # Create superuser secret before the pod starts (postgres container reads it on init)
+    import secrets as _sec
+    pg_secret = "postgres-postgresql"
+    r = _kubectl("get", "secret", pg_secret, "-n", ns, check=False)
+    if r.returncode != 0:
+        pg_password = _sec.token_urlsafe(16)
+        _kubectl(
+            "create", "secret", "generic", pg_secret,
+            f"--from-literal=postgres-password={pg_password}",
+            "-n", ns,
+        )
+        _ok(f"Secret {pg_secret} created in {ns}")
+
+    _run(["kubectl", "apply", "-f", str(pg_manifest)])
+    _run_streamed([
+        "kubectl", "rollout", "status", f"deployment/{deploy_name}",
+        "-n", ns, "--timeout=300s",
+    ])
+    _ok(f"PostgreSQL ready for {cfg.issuer_id}")
+
+
+def _ensure_redis(cfg, ns: str, redis_manifest: Path) -> None:
+    """Deploy an in-cluster Redis Deployment + Service for on-prem.
+
+    Idempotent: skips if the Deployment already exists.
+    """
+    r = _kubectl("get", "deployment", "redis", "-n", ns, check=False)
+    if r.returncode == 0:
+        _skip(f"redis deployment in {ns}")
+        return
+
+    _step(f"deploying Redis in {ns}")
+    _run(["kubectl", "apply", "-f", str(redis_manifest)])
+    _run_streamed([
+        "kubectl", "rollout", "status", "deployment/redis",
+        "-n", ns, "--timeout=120s",
+    ])
+    _ok(f"Redis ready for {cfg.issuer_id}")
+
+
 # ── step 3: DB init ──────────────────────────────────────────
 
 def _init_db(cfg, ns: str, db_init_values: Path, provider, db_secret_ref: str | None = None) -> None:
@@ -241,16 +303,34 @@ def _init_db(cfg, ns: str, db_init_values: Path, provider, db_secret_ref: str | 
     if _helm_release_exists(ns, release):
         _skip(f"Helm release {release}")
         return
-    secret_ref = db_secret_ref or f"inji/{cfg.issuer_id}/db-credentials"
-    try:
-        secret = provider.read_secret(secret_ref)
-        db_password = secret.get("password", "CHANGE_ME")
-    except Exception:
-        db_password = "CHANGE_ME"
-        console.print(
-            "  [yellow]⚠[/yellow]  Could not read the DB password from the configured secret backend. "
-            "Using placeholder — update it first."
-        )
+
+    # Read the app-user DB password directly from the k8s Secret we created in
+    # the same phase (works on all providers; avoids dependency on the secret
+    # store backend being configured correctly for on-prem).
+    db_password = "CHANGE_ME"
+    import base64
+    r = _run(
+        ["kubectl", "get", "secret", f"inji-{cfg.issuer_id}-db-secret",
+         "-n", ns, "-o", "jsonpath={.data.password}"],
+        check=False,
+    )
+    if r.returncode == 0 and r.stdout.strip():
+        try:
+            db_password = base64.b64decode(r.stdout.strip()).decode()
+        except Exception:
+            pass
+
+    if db_password == "CHANGE_ME":
+        # Fallback: read from the secret store backend
+        secret_ref = db_secret_ref or f"inji/{cfg.issuer_id}/db-credentials"
+        try:
+            secret = provider.read_secret(secret_ref)
+            db_password = secret.get("password", "CHANGE_ME")
+        except Exception:
+            console.print(
+                "  [yellow]⚠[/yellow]  Could not read the DB password from k8s Secret or "
+                "secret backend. Using placeholder — update it first."
+            )
 
     _run_streamed([
         "helm", "-n", ns,
@@ -436,12 +516,14 @@ def run(state: DeployState, dry_run: bool = False) -> None:
     )).parent
 
     # Resolve generated file paths
-    certify_props = out_dir / f"certify-{cfg.issuer_id}.properties"
-    helm_values   = out_dir / "helm-values-certify.yaml"
-    softhsm_vals  = out_dir / "helm-values-softhsm.yaml"
-    configmap_f   = out_dir / "k8s-configmap.yaml"
-    mimoto_patch  = out_dir / "mimoto-issuer-patch.json"
-    db_init_vals  = out_dir / "db-init-values.yaml"
+    certify_props  = out_dir / f"certify-{cfg.issuer_id}.properties"
+    helm_values    = out_dir / "helm-values-certify.yaml"
+    softhsm_vals   = out_dir / "helm-values-softhsm.yaml"
+    configmap_f    = out_dir / "k8s-configmap.yaml"
+    mimoto_patch   = out_dir / "mimoto-issuer-patch.json"
+    db_init_vals   = out_dir / "db-init-values.yaml"
+    redis_manifest = out_dir / "k8s-redis.yaml"
+    pg_manifest    = out_dir / "k8s-postgresql.yaml"
 
     if dry_run:
         _print_dry_run(cfg, ns)
@@ -493,6 +575,19 @@ def run(state: DeployState, dry_run: bool = False) -> None:
         else:
             _skip("shared ConfigMaps")
 
+        # 2. On-prem infrastructure dependencies (PostgreSQL + Redis)
+        if provider_name == "onprem":
+            console.print("\n  [bold]2. On-prem infrastructure (PostgreSQL + Redis)[/bold]")
+            provision_db_flag = getattr(cfg, "provision_db", False)
+            if provision_db_flag and _is_incluster_host(cfg.rds_host) and pg_manifest.exists():
+                _ensure_postgresql(cfg, ns, pg_manifest)
+            elif provision_db_flag and not _is_incluster_host(cfg.rds_host):
+                _skip(f"PostgreSQL deployment (external host: {cfg.rds_host})")
+            if redis_manifest.exists():
+                _ensure_redis(cfg, ns, redis_manifest)
+            else:
+                console.print("  [yellow]⚠[/yellow]  k8s-redis.yaml not found — run 'phase config' first")
+
         # --- Ensure DB Secret exists if provisioning DB ---
         db_secret = f"inji-{cfg.issuer_id}-db-secret"
         provision_db = getattr(cfg, "provision_db", False)
@@ -509,16 +604,15 @@ def run(state: DeployState, dry_run: bool = False) -> None:
                     "-n", ns
                 )
                 _ok(f"Secret {db_secret} created in {ns}")
-                # Guardar en el estado
                 state.db_credentials = {"username": db_user, "password": db_pass, "secret_name": db_secret}
                 save_state(state)
 
-        # 2. Apply issuer ConfigMap
-        console.print("\n  [bold]2. Issuer ConfigMap[/bold]")
+        # 3. Apply issuer ConfigMap
+        console.print("\n  [bold]3. Issuer ConfigMap[/bold]")
         _apply_configmap(configmap_f, ns)
 
-        # 3. DB init (only when provision_db is requested)
-        console.print("\n  [bold]3. Database initialization[/bold]")
+        # 4. DB init (only when provision_db is requested)
+        console.print("\n  [bold]4. Database initialization[/bold]")
         provision_db = getattr(cfg, "provision_db", False)
         if provision_db:
             _init_db(
@@ -533,19 +627,19 @@ def run(state: DeployState, dry_run: bool = False) -> None:
             _skip("DB init (provision_db=false — using external PostgreSQL)")
             outputs["db_initialized"] = False
 
-        # 4. SoftHSM
-        console.print("\n  [bold]4. SoftHSM[/bold]")
+        # 5. SoftHSM
+        console.print("\n  [bold]5. SoftHSM[/bold]")
         _install_softhsm(cfg, ns, softhsm_vals)
         outputs["softhsm_installed"] = True
 
-        # 5. Certify
-        console.print("\n  [bold]5. inji-certify[/bold]")
+        # 6. Certify
+        console.print("\n  [bold]6. inji-certify[/bold]")
         _install_certify(cfg, ns, certify_props, helm_values, provider=provider_name)
         outputs["certify_installed"] = True
         outputs["certify_url"] = f"https://{cfg.base_domain}/v1/certify"
 
-        # 6. Mimoto patch
-        console.print("\n  [bold]6. Mimoto registration[/bold]")
+        # 7. Mimoto patch
+        console.print("\n  [bold]7. Mimoto registration[/bold]")
         _patch_mimoto(cfg, mimoto_patch, provider)
         outputs["mimoto_patched"] = True
 
@@ -569,13 +663,21 @@ def _print_dry_run(cfg, ns: str) -> None:
     shared_source_ns = getattr(cfg, "shared_config_source_namespace", "config-server")
     shared_configmaps = _shared_configmaps(cfg)
     shared_label = ", ".join(shared_configmaps) if shared_configmaps else "<none>"
+    provision_db = getattr(cfg, "provision_db", False)
+    pg_label = (
+        f"kubectl apply k8s-postgresql.yaml (service: {cfg.rds_host})"
+        if provision_db and _is_incluster_host(cfg.rds_host)
+        else f"skipped (external host: {cfg.rds_host})"
+    )
     rows = [
-        ("1. ConfigMaps",  f"copy {shared_label} from {shared_source_ns} → {ns}"),
-        ("2. ConfigMap",   f"kubectl apply k8s-configmap.yaml -n {ns}"),
-        ("3. DB init",     f"helm install postgres-init-{cfg.issuer_id} from {getattr(cfg, 'postgres_init_chart_ref', 'mosip/postgres-init')}"),
-        ("4. SoftHSM",     f"helm install softhsm-certify-{cfg.issuer_id} in {getattr(cfg, 'softhsm_namespace', 'softhsm')}"),
-        ("5. Certify",     f"helm install inji-certify-{cfg.issuer_id} from {getattr(cfg, 'certify_chart_ref', 'mosip/inji-certify')} v{cfg.chart_version}"),
-        ("6. Mimoto",      f"Config-store patch + kubectl rollout restart {cfg.mimoto_service_name}"),
+        ("1. ConfigMaps",    f"copy {shared_label} from {shared_source_ns} → {ns}"),
+        ("2a. PostgreSQL",   pg_label),
+        ("2b. Redis",        f"kubectl apply k8s-redis.yaml -n {ns}"),
+        ("3. ConfigMap",     f"kubectl apply k8s-configmap.yaml -n {ns}"),
+        ("4. DB init",       f"helm install postgres-init-{cfg.issuer_id} from {getattr(cfg, 'postgres_init_chart_ref', 'mosip/postgres-init')}"),
+        ("5. SoftHSM",       f"helm install softhsm-certify-{cfg.issuer_id} in {getattr(cfg, 'softhsm_namespace', 'softhsm')}"),
+        ("6. Certify",       f"helm install inji-certify-{cfg.issuer_id} from {getattr(cfg, 'certify_chart_ref', 'mosip/inji-certify')} v{cfg.chart_version}"),
+        ("7. Mimoto",        f"Config-store patch + kubectl rollout restart {cfg.mimoto_service_name}"),
     ]
     for s, a in rows:
         t.add_row(s, a)

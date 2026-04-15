@@ -69,15 +69,16 @@
     },
     "config_gen": {
       "completed": true,
-      "started_at": "2026-04-14T18:17:39.811328+00:00",
-      "completed_at": "2026-04-14T18:17:39.833912+00:00",
+      "started_at": "2026-04-15T14:30:43.344775+00:00",
+      "completed_at": "2026-04-15T14:30:43.365789+00:00",
       "outputs": {
         "certify-mtc.properties": ".inji-deploy\\mtc\\certify-mtc.properties",
         "helm-values-certify.yaml": ".inji-deploy\\mtc\\helm-values-certify.yaml",
         "helm-values-softhsm.yaml": ".inji-deploy\\mtc\\helm-values-softhsm.yaml",
         "k8s-configmap.yaml": ".inji-deploy\\mtc\\k8s-configmap.yaml",
         "mimoto-issuer-patch.json": ".inji-deploy\\mtc\\mimoto-issuer-patch.json",
-        "db-init-values.yaml": ".inji-deploy\\mtc\\db-init-values.yaml"
+        "db-init-values.yaml": ".inji-deploy\\mtc\\db-init-values.yaml",
+        "k8s-redis.yaml": ".inji-deploy\\mtc\\k8s-redis.yaml"
       },
       "error": ""
     },
@@ -97,5 +98,5 @@
     }
   },
   "created_at": "2026-04-11T16:29:59.815235+00:00",
-  "updated_at": "2026-04-14T18:17:39.833912+00:00"
+  "updated_at": "2026-04-15T14:30:43.365789+00:00"
 }
