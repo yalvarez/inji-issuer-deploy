@@ -219,7 +219,7 @@ additionalResources:
     -Dmosip.certify.authn.jwk-set-uri={{ idperu_jwks_uri }}
     -Dspring.data.redis.host={{ redis_host }}
     -Dspring.data.redis.port={{ redis_port }}
-    -Dspring.config.import=optional:file:///config/certify-{{ issuer_id }}.properties
+    -Dspring.config.import=file:///config/certify-{{ issuer_id }}.properties
 
 {% if provider == 'onprem' %}
 istio:
@@ -335,6 +335,7 @@ data:
   idperu_jwks_uri: "{{ idperu_jwks_uri }}"
   MOSIP_CERTIFY_AUTHN_ALLOWED_AUDIENCES: "{'https://{{ base_domain }}/v1/certify/issuance/credential'}"
   MOSIP_CERTIFY_AUTHN_FILTER_URLS: "{'/v1/certify/issuance/credential','/v1/certify/issuance/vd11/credential','/v1/certify/issuance/vd12/credential'}"
+  MOSIP_CERTIFY_SUPPORTED_JWT_PROOF_ALG: "{'RS256','PS256','ES256','Ed25519'}"
 """
 
 K8S_REDIS = """\
