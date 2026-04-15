@@ -82,6 +82,11 @@ class IssuerConfig:
     softhsm_chart_version: str = "1.3.0-beta.2"
     node_selector: dict = field(default_factory=dict)
     provision_db: bool = False          # True → create DB Secret and run postgres-init
+    provision_redis: bool = False
+    redis_host: str = "redis"
+    redis_port: int = 6379
+    redis_chart_ref: str = "bitnami/redis"
+    redis_chart_version: str = "18.1.6"
 
 
 @dataclass

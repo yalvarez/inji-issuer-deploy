@@ -43,6 +43,12 @@ const I18N = {
       rds_host:                       { label: "RDS/Postgres Host",               tip: "Host address of the external database.",                           example: "e.g. db.internal.net" },
       rds_port:                       { label: "RDS/Postgres Port",               tip: "Port of the external database.",                                   example: "5432" },
       scope_mappings:                 { label: "Credential Scopes (JSON)",        tip: "List of scopes and profiles offered by this issuer.",              example: '[{"scope": "id-card", "profile": "ID", "service": "ws-api"}]' },
+      provision_db:                   { label: "Provision Database",              tip: "Create a dedicated PostgreSQL instance within the cluster.",       example: "" },
+      provision_redis:                { label: "Provision Redis",                 tip: "Create a dedicated Redis instance within the cluster.",            example: "" },
+      redis_host:                     { label: "Redis Host",                      tip: "Host address of the external Redis.",                              example: "e.g. redis.internal.net" },
+      redis_port:                     { label: "Redis Port",                      tip: "Port of the external Redis.",                                      example: "6379" },
+      redis_chart_ref:                { label: "Redis Chart Ref",                 tip: "Helm chart reference for Redis.",                                  example: "bitnami/redis" },
+      redis_chart_version:            { label: "Redis Chart Version",             tip: "Helm chart version for Redis.",                                      example: "18.1.6" },
     },
   },
   es: {
@@ -85,6 +91,12 @@ const I18N = {
       rds_host:                       { label: "Host RDS/Postgres",               tip: "Dirección del host de la base de datos externa.",                                example: "ej. db.internal.net" },
       rds_port:                       { label: "Puerto RDS/Postgres",             tip: "Puerto de la base de datos externa.",                                            example: "5432" },
       scope_mappings:                 { label: "Scopes de Credenciales (JSON)",   tip: "Lista de scopes y perfiles ofrecidos por este emisor.",                          example: '[{"scope": "dni", "profile": "DNI", "service": "ws-api"}]' },
+      provision_db:                   { label: "Aprovisionar Base de Datos",      tip: "Crear una instancia dedicada de PostgreSQL dentro del clúster.",                 example: "" },
+      provision_redis:                { label: "Aprovisionar Redis",              tip: "Crear una instancia dedicada de Redis dentro del clúster.",                      example: "" },
+      redis_host:                     { label: "Host Redis",                      tip: "Dirección del host de Redis externo.",                                           example: "ej. redis.internal.net" },
+      redis_port:                     { label: "Puerto Redis",                    tip: "Puerto de Redis externo.",                                                       example: "6379" },
+      redis_chart_ref:                { label: "Ref Chart Redis",                 tip: "Referencia del chart de Helm para Redis.",                                       example: "bitnami/redis" },
+      redis_chart_version:            { label: "Versión Chart Redis",             tip: "Versión del chart de Helm para Redis.",                                          example: "18.1.6" },
     },
   },
   fr: {
@@ -234,6 +246,12 @@ const DEFAULT_FORM = {
   onprem_cert_issuer_name: "letsencrypt-prod",
   onprem_cert_issuer_kind: "ClusterIssuer",
   scope_mappings: [],
+  provision_db: false,
+  provision_redis: false,
+  redis_host: "redis",
+  redis_port: 6379,
+  redis_chart_ref: "bitnami/redis",
+  redis_chart_version: "18.1.6",
 };
 
 async function apiGet(path, stateFile) {
@@ -555,11 +573,43 @@ function App() {
                     <input
                       type="checkbox"
                       checked={!!form.provision_db}
-                      onChange={e => updateField("provision_db", e.target.checked)}
+                      onChange={e => {
+                        const val = e.target.checked;
+                        setForm(f => ({
+                          ...f,
+                          provision_db: val,
+                          rds_host: val ? `postgres-${f.issuer_id}` : f.rds_host
+                        }));
+                      }}
                     />
-                    {t.provision_db || "Provision PostgreSQL in cluster (as a pod/service)"}
+                    {t.fields.provision_db.label}
                   </label>
                 </Field>
+
+                <Field fieldKey="provision_redis" t={t}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5em' }}>
+                    <input
+                      type="checkbox"
+                      checked={!!form.provision_redis}
+                      onChange={e => {
+                        const val = e.target.checked;
+                        setForm(f => ({
+                          ...f,
+                          provision_redis: val,
+                          redis_host: val ? `redis-${f.issuer_id}` : f.redis_host
+                        }));
+                      }}
+                    />
+                    {t.fields.provision_redis.label}
+                  </label>
+                </Field>
+
+                {!form.provision_redis && (
+                  <>
+                    <Field fieldKey="redis_host" t={t}><input required={!form.provision_redis} value={form.redis_host || ""} onChange={(e) => updateField("redis_host", e.target.value)} /></Field>
+                    <Field fieldKey="redis_port" t={t}><input type="number" value={form.redis_port || 6379} onChange={(e) => updateField("redis_port", parseInt(e.target.value) || 6379)} /></Field>
+                  </>
+                )}
               </div>
 
               <button type="button" className="link-button" onClick={() => setShowAdvanced((v) => !v)}>
@@ -592,6 +642,12 @@ function App() {
                   </Field>
                   <Field fieldKey="onprem_cert_issuer_kind" t={t}><input value={form.onprem_cert_issuer_kind || ""} onChange={(e) => updateField("onprem_cert_issuer_kind", e.target.value)} /></Field>
                   <Field fieldKey="onprem_cert_issuer_name" t={t}><input value={form.onprem_cert_issuer_name || ""} onChange={(e) => updateField("onprem_cert_issuer_name", e.target.value)} /></Field>
+                  <Field fieldKey="redis_chart_ref" t={t}>
+                    <input value={form.redis_chart_ref || ""} onChange={(e) => updateField("redis_chart_ref", e.target.value)} />
+                  </Field>
+                  <Field fieldKey="redis_chart_version" t={t}>
+                    <input value={form.redis_chart_version || ""} onChange={(e) => updateField("redis_chart_version", e.target.value)} />
+                  </Field>
                   <Field fieldKey="shared_configmaps" t={t}>
                     <input
                       value={Array.isArray(form.shared_configmaps) ? form.shared_configmaps.join(", ") : (form.shared_configmaps || "")}

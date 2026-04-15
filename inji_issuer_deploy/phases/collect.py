@@ -203,9 +203,13 @@ def run(state: DeployState) -> None:
 
     # ── 0. DB provisioning option ───────────────────────────
     # provision_db lives on IssuerConfig so it serialises with the rest of the state.
-    # If not yet set (first run), default to False.
-    if not cfg.provision_db:
+    if not hasattr(cfg, "provision_db") or cfg.provision_db is None:
         cfg.provision_db = False
+
+    # Redis provisioning option
+    if not hasattr(cfg, "provision_redis") or cfg.provision_redis is None:
+        cfg.provision_redis = False
+
 
     # ── 1. Identity ──────────────────────────────────────────
     console.print("\n[bold underline]1. Issuer identity[/bold underline]")
@@ -385,6 +389,11 @@ def run(state: DeployState) -> None:
     # ── 3. Shared infrastructure ─────────────────────────────
     console.print("\n[bold underline]3. Shared infrastructure[/bold underline]")
 
+    cfg.provision_db = _ask_bool(
+        "Provision a dedicated PostgreSQL instance in the cluster?",
+        default=cfg.provision_db
+    )
+
     if cfg.provision_db:
         # If provisioning DB in cluster, use internal service name and no admin secret
         cfg.rds_host = f"postgres-{cfg.issuer_id}"
@@ -400,6 +409,26 @@ def run(state: DeployState) -> None:
             default=cfg.rds_admin_secret_arn or "",
             hint="Secrets Manager / Key Vault / Secret Manager / Vault reference for the DB superuser",
         )
+
+    cfg.provision_redis = _ask_bool(
+        "Provision a dedicated Redis instance in the cluster?",
+        default=cfg.provision_redis
+    )
+
+    if cfg.provision_redis:
+        # If provisioning Redis in cluster, use internal service name
+        cfg.redis_host = f"redis-{cfg.issuer_id}"
+    else:
+        cfg.redis_host = _ask(
+            "Redis host",
+            default=cfg.redis_host or "redis",
+            hint="shared Redis endpoint",
+        )
+        cfg.redis_port = int(_ask(
+            "Redis port",
+            default=str(cfg.redis_port or 6379),
+        ))
+
     cfg.mimoto_issuers_s3_bucket = _ask(
         "Mimoto config bucket / container",
         default=cfg.mimoto_issuers_s3_bucket or "",
@@ -582,6 +611,8 @@ def _print_summary(cfg: IssuerConfig, provider_cfg: CloudProviderConfig | None =
         ("Region / location", cfg.aws_region),
         ("Kubernetes cluster", cfg.eks_cluster_name),
         ("DB host",          cfg.rds_host),
+        ("Redis host",       cfg.redis_host),
+        ("Redis Chart",      f"{cfg.redis_chart_ref}:{cfg.redis_chart_version}" if cfg.provision_redis else "<external>"),
         ("IDPeru JWKS",      cfg.idperu_jwks_uri),
         ("IDPeru claim",     cfg.document_number_claim),
         ("Data API",         cfg.data_api_base_url),

@@ -275,6 +275,27 @@ def _ensure_postgresql(cfg, ns: str, pg_manifest: Path) -> None:
     _ok(f"PostgreSQL ready for {cfg.issuer_id}")
 
 
+def _install_redis_chart(cfg, ns: str) -> None:
+    """Install Redis using the configured Helm chart."""
+    release = f"redis-{cfg.issuer_id}"
+    if _helm_release_exists(ns, release):
+        _skip(f"Redis release {release}")
+        return
+
+    _step(f"installing Redis chart {cfg.redis_chart_ref} ({cfg.redis_chart_version})")
+    _run_streamed([
+        "helm", "-n", ns,
+        "install", release,
+        cfg.redis_chart_ref,
+        "--version", cfg.redis_chart_version,
+        "--set", "architecture=standalone",
+        "--set", "auth.enabled=false",
+        "--set", f"master.service.name=redis-{cfg.issuer_id}",
+        "--wait",
+    ])
+    _ok(f"Redis installed for {cfg.issuer_id}")
+
+
 def _ensure_redis(cfg, ns: str, redis_manifest: Path) -> None:
     """Deploy an in-cluster Redis Deployment + Service for on-prem.
 

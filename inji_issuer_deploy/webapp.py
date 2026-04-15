@@ -66,11 +66,14 @@ class IssuerConfigPayload(BaseModel):
     postgres_init_chart_version: str = "0.0.1-develop"
     softhsm_chart_ref: str = "mosip/softhsm"
     softhsm_namespace: str = "softhsm"
+    redis_chart_ref: str = "bitnami/redis"
+    redis_chart_version: str = "18.1.6"
     certify_image: str = "mosipid/inji-certify-with-plugins:0.12.2"
     chart_version: str = "0.12.2"
     softhsm_chart_version: str = "1.3.0-beta.2"
     node_selector: dict = Field(default_factory=dict)
     provision_db: bool = False
+    provision_redis: bool = False
     provider: str = "onprem"
     provisioner: str = "python"
     onprem_registry_backend: str = "plain"
