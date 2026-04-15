@@ -509,11 +509,10 @@ def run(state: DeployState, dry_run: bool = False) -> None:
     ns = f"inji-{cfg.issuer_id}"
     provider = _resolve_provider(state, cfg)
     infra_outputs = state.phase("infra").outputs
-    gen_outputs = state.phase("config_gen").outputs
-    out_dir = Path(gen_outputs.get(
-        f"certify-{cfg.issuer_id}.properties",
-        f".inji-deploy/{cfg.issuer_id}/certify-{cfg.issuer_id}.properties"
-    )).parent
+
+    # Always derive out_dir from issuer_id — never from stored state paths,
+    # which can be relative and break when CWD differs between runs.
+    out_dir = Path(".inji-deploy") / cfg.issuer_id
 
     # Resolve generated file paths
     certify_props  = out_dir / f"certify-{cfg.issuer_id}.properties"
