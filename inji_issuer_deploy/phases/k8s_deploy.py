@@ -561,6 +561,16 @@ def run(state: DeployState, dry_run: bool = False) -> None:
         _run_streamed(["helm", "repo", "update", repo_name])
         _ok("Helm repo updated")
 
+    # Verify the Kubernetes API server is reachable before doing any work
+    r_ping = _run(["kubectl", "cluster-info"], check=False)
+    if r_ping.returncode != 0:
+        raise RuntimeError(
+            "Kubernetes API server is not reachable.\n"
+            "Ensure k3s is running:\n"
+            "  sudo /usr/local/bin/k3s-killall.sh && sudo systemctl start k3s\n"
+            "Then wait until: kubectl get nodes"
+        )
+
     state.mark_started("k8s_deploy")
     outputs: dict = {}
 
