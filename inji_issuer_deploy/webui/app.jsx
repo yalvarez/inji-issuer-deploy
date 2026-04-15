@@ -36,6 +36,13 @@ const I18N = {
       onprem_cert_issuer_kind:        { label: "Cert issuer kind",                tip: "Cert-manager resource kind used to issue TLS certificates.",       example: "e.g. ClusterIssuer" },
       onprem_cert_issuer_name:        { label: "Cert issuer name",                tip: "Name of the ClusterIssuer or Issuer already installed in the cluster.", example: "e.g. letsencrypt-prod" },
       shared_configmaps:              { label: "Shared ConfigMaps",               tip: "Comma-separated names of ConfigMaps that exist in the shared config namespace.", example: "e.g. global-config, issuer-common" },
+      issuer_description:             { label: "Description",                     tip: "Short text describing the issuer's purpose.",                      example: "e.g. Driver licenses for MTC" },
+      issuer_logo_url:                { label: "Logo URL",                        tip: "Public URL for the issuer logo shown in the wallet.",              example: "e.g. https://domain.com/logo.png" },
+      mimoto_base_url:                { label: "Mimoto Base URL",                 tip: "Override the auto-derived Mimoto URL if necessary.",               example: "e.g. https://mimoto.internal/v1/mimoto" },
+      eks_cluster_name:               { label: "EKS Cluster Name",                tip: "Target EKS cluster name (required for AWS provider).",             example: "e.g. INJI-prod" },
+      rds_host:                       { label: "RDS/Postgres Host",               tip: "Host address of the external database.",                           example: "e.g. db.internal.net" },
+      rds_port:                       { label: "RDS/Postgres Port",               tip: "Port of the external database.",                                   example: "5432" },
+      scope_mappings:                 { label: "Credential Scopes (JSON)",        tip: "List of scopes and profiles offered by this issuer.",              example: '[{"scope": "id-card", "profile": "ID", "service": "ws-api"}]' },
     },
   },
   es: {
@@ -71,6 +78,13 @@ const I18N = {
       onprem_cert_issuer_kind:        { label: "Tipo de emisor TLS",              tip: "Tipo de recurso cert-manager usado para emitir certificados TLS.",               example: "ej. ClusterIssuer" },
       onprem_cert_issuer_name:        { label: "Nombre del emisor TLS",           tip: "Nombre del ClusterIssuer o Issuer ya instalado en el clúster.",                  example: "ej. letsencrypt-prod" },
       shared_configmaps:              { label: "ConfigMaps compartidos",          tip: "Nombres separados por coma de ConfigMaps que existen en el namespace compartido.", example: "ej. global-config, issuer-common" },
+      issuer_description:             { label: "Descripción",                     tip: "Texto corto que describe el propósito del emisor.",                              example: "ej. Licencias de conducir MTC" },
+      issuer_logo_url:                { label: "URL del Logo",                    tip: "URL pública del logo del emisor para la billetera.",                             example: "ej. https://dominio.com/logo.png" },
+      mimoto_base_url:                { label: "URL Base de Mimoto",              tip: "Sobrescribe la URL de Mimoto derivada automáticamente.",                         example: "ej. https://mimoto.internal/v1/mimoto" },
+      eks_cluster_name:               { label: "Nombre Cluster EKS",              tip: "Nombre del cluster EKS destino (requerido para AWS).",                           example: "ej. INJI-prod" },
+      rds_host:                       { label: "Host RDS/Postgres",               tip: "Dirección del host de la base de datos externa.",                                example: "ej. db.internal.net" },
+      rds_port:                       { label: "Puerto RDS/Postgres",             tip: "Puerto de la base de datos externa.",                                            example: "5432" },
+      scope_mappings:                 { label: "Scopes de Credenciales (JSON)",   tip: "Lista de scopes y perfiles ofrecidos por este emisor.",                          example: '[{"scope": "dni", "profile": "DNI", "service": "ws-api"}]' },
     },
   },
   fr: {
@@ -203,6 +217,12 @@ const DEFAULT_FORM = {
   provisioner: "python",
   data_api_base_url: "",
   data_api_auth_type: "mtls",
+  issuer_description: "",
+  issuer_logo_url: "",
+  mimoto_base_url: "",
+  eks_cluster_name: "",
+  rds_host: "",
+  rds_port: 5432,
   idperu_jwks_uri: "",
   idperu_issuer_uri: "",
   document_number_claim: "individualId",
@@ -213,6 +233,7 @@ const DEFAULT_FORM = {
   onprem_secrets_backend: "k8s",
   onprem_cert_issuer_name: "letsencrypt-prod",
   onprem_cert_issuer_kind: "ClusterIssuer",
+  scope_mappings: [],
 };
 
 async function apiGet(path, stateFile) {
@@ -495,6 +516,8 @@ function App() {
               <div className="form-grid compact">
                 <Field fieldKey="issuer_id" t={t}><input required value={form.issuer_id || ""} onChange={(e) => updateField("issuer_id", e.target.value)} /></Field>
                 <Field fieldKey="issuer_name" t={t}><input required value={form.issuer_name || ""} onChange={(e) => updateField("issuer_name", e.target.value)} /></Field>
+                <Field fieldKey="issuer_description" t={t}><input value={form.issuer_description || ""} onChange={(e) => updateField("issuer_description", e.target.value)} /></Field>
+                <Field fieldKey="issuer_logo_url" t={t}><input value={form.issuer_logo_url || ""} onChange={(e) => updateField("issuer_logo_url", e.target.value)} /></Field>
                 <Field fieldKey="base_domain" t={t}><input required value={form.base_domain || ""} onChange={(e) => updateField("base_domain", e.target.value)} /></Field>
                 <Field fieldKey="provider" t={t}>
                   <select required value={form.provider || "onprem"} onChange={(e) => updateField("provider", e.target.value)}>
@@ -511,6 +534,22 @@ function App() {
                   </select>
                 </Field>
                 <Field fieldKey="shared_config_source_namespace" t={t}><input required value={form.shared_config_source_namespace || ""} onChange={(e) => updateField("shared_config_source_namespace", e.target.value)} /></Field>
+                
+                {form.provider === "aws" && (
+                  <Field fieldKey="eks_cluster_name" t={t}><input required={form.provider === "aws"} value={form.eks_cluster_name || ""} onChange={(e) => updateField("eks_cluster_name", e.target.value)} /></Field>
+                )}
+
+                {!form.provision_db && (
+                  <>
+                    <Field fieldKey="rds_host" t={t}><input required={!form.provision_db} value={form.rds_host || ""} onChange={(e) => updateField("rds_host", e.target.value)} /></Field>
+                    <Field fieldKey="rds_port" t={t}><input type="number" value={form.rds_port || 5432} onChange={(e) => updateField("rds_port", parseInt(e.target.value) || 5432)} /></Field>
+                  </>
+                )}
+
+                <Field fieldKey="mimoto_base_url" t={t}><input value={form.mimoto_base_url || ""} onChange={(e) => updateField("mimoto_base_url", e.target.value)} /></Field>
+                <Field fieldKey="idperu_jwks_uri" t={t}><input required value={form.idperu_jwks_uri || ""} onChange={(e) => updateField("idperu_jwks_uri", e.target.value)} /></Field>
+                <Field fieldKey="idperu_issuer_uri" t={t}><input required value={form.idperu_issuer_uri || ""} onChange={(e) => updateField("idperu_issuer_uri", e.target.value)} /></Field>
+
                 <Field fieldKey="provision_db" t={t}>
                   <label style={{ display: 'flex', alignItems: 'center', gap: '0.5em' }}>
                     <input
@@ -530,8 +569,15 @@ function App() {
               {showAdvanced && (
                 <div className="form-grid compact advanced-grid">
                   <Field fieldKey="data_api_base_url" t={t}><input required value={form.data_api_base_url || ""} onChange={(e) => updateField("data_api_base_url", e.target.value)} /></Field>
-                  <Field fieldKey="idperu_jwks_uri" t={t}><input required value={form.idperu_jwks_uri || ""} onChange={(e) => updateField("idperu_jwks_uri", e.target.value)} /></Field>
-                  <Field fieldKey="idperu_issuer_uri" t={t}><input required value={form.idperu_issuer_uri || ""} onChange={(e) => updateField("idperu_issuer_uri", e.target.value)} /></Field>
+                  <Field fieldKey="scope_mappings" t={t}>
+                    <textarea 
+                      style={{ width: '100%', minHeight: '80px', fontFamily: 'monospace' }}
+                      value={JSON.stringify(form.scope_mappings, null, 2)}
+                      onChange={(e) => {
+                        try { updateField("scope_mappings", JSON.parse(e.target.value)); } catch(err) {}
+                      }}
+                    />
+                  </Field>
                   <Field fieldKey="onprem_registry_backend" t={t}>
                     <select required value={form.onprem_registry_backend || "plain"} onChange={(e) => updateField("onprem_registry_backend", e.target.value)}>
                       <option value="plain">plain</option>
