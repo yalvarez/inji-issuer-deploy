@@ -219,7 +219,7 @@ additionalResources:
     -Dmosip.certify.authn.jwk-set-uri={{ idperu_jwks_uri }}
     -Dspring.data.redis.host={{ redis_host }}
     -Dspring.data.redis.port={{ redis_port }}
-    -Dmosip.certify.authn.allowed-audiences=https://{{ base_domain }}/v1/certify/issuance/credential
+    -Dmosip.certify.authn.allowed-audiences={'https://{{ base_domain }}/v1/certify/issuance/credential'}
 
 {% if provider == 'onprem' %}
 istio:
