@@ -334,6 +334,7 @@ data:
   idperu_issuer_uri: "{{ idperu_issuer_uri }}"
   idperu_jwks_uri: "{{ idperu_jwks_uri }}"
   MOSIP_CERTIFY_AUTHN_ALLOWED_AUDIENCES: "{'https://{{ base_domain }}/v1/certify/issuance/credential'}"
+  MOSIP_CERTIFY_AUTHN_FILTER_URLS: "{'/v1/certify/issuance/credential','/v1/certify/issuance/vd11/credential','/v1/certify/issuance/vd12/credential'}"
 """
 
 K8S_REDIS = """\
